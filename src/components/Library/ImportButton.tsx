@@ -27,9 +27,23 @@ export function ImportButton({ onImport, importing }: ImportButtonProps) {
         type="button"
         disabled={importing}
         onClick={() => inputRef.current?.click()}
-        className="rounded-full bg-libro-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-80 disabled:opacity-50"
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-libro-accent text-white transition hover:opacity-80 disabled:opacity-50"
+        aria-label={importing ? 'Importing books' : 'Import books'}
+        title={importing ? 'Importing...' : 'Import'}
       >
-        {importing ? 'Importing…' : '+ Import'}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          className="h-5 w-5"
+        >
+          <path
+            d="M12 5v14M5 12h14"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+          />
+        </svg>
       </button>
     </>
   )

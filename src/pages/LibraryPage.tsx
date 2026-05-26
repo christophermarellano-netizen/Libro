@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from '../components/Layout/TopBar'
 import { InstallPrompt } from '../components/Layout/InstallPrompt'
 import { CoverGrid } from '../components/Library/CoverGrid'
 import { CoverFlowCarousel } from '../components/Library/CoverFlowCarousel'
+import { LibrarySubHeader } from '../components/Library/LibrarySubHeader'
 import { ShelfOverview } from '../components/Library/ShelfOverview'
 import { useBooks } from '../hooks/useBooks'
 import { useSettings } from '../hooks/useSettings'
@@ -19,6 +21,11 @@ export function LibraryPage() {
   const sort = settings?.librarySort ?? 'recent'
   const view = settings?.libraryView ?? 'grid'
   const { books, importBook, deleteBook, touchBook, refreshMetadata } = useBooks(sort)
+  const [focusedBook, setFocusedBook] = useState<Book | null>(null)
+
+  const handleFocusedBookChange = useCallback((book: Book | null) => {
+    setFocusedBook(book)
+  }, [])
 
   const seedStarted = useRef(false)
 
@@ -81,9 +88,7 @@ export function LibraryPage() {
       <InstallPrompt />
       <TopBar
         view={view}
-        sort={sort}
         onViewChange={(v: LibraryView) => save({ libraryView: v })}
-        onSortChange={(s: LibrarySort) => save({ librarySort: s })}
         onImport={handleImport}
         importing={importing}
       />
@@ -94,16 +99,64 @@ export function LibraryPage() {
         </div>
       )}
 
-      <main className="flex flex-1 flex-col overflow-auto">
-        {view === 'grid' && (
-          <CoverGrid books={books} onOpen={handleOpen} onDelete={handleDelete} />
-        )}
-        {view === 'coverflow' && (
-          <CoverFlowCarousel books={books} onOpen={handleOpen} />
-        )}
-        {view === 'shelf' && (
-          <ShelfOverview books={books} onOpen={handleOpen} />
-        )}
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <LibrarySubHeader
+          sort={sort}
+          onSortChange={(s: LibrarySort) => save({ librarySort: s })}
+        >
+          {view === 'coverflow' ? (
+            focusedBook ? (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={focusedBook.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <h2 className="text-lg font-semibold">{focusedBook.title}</h2>
+                  <p className="text-sm text-libro-muted">{focusedBook.author}</p>
+                </motion.div>
+              </AnimatePresence>
+            ) : (
+              <div>
+                <h2 className="text-lg font-semibold">Select a book</h2>
+                <p className="text-sm text-libro-muted">
+                  Click a spine to center it and show its cover
+                </p>
+              </div>
+            )
+          ) : (
+            <div>
+              <h2 className="text-lg font-semibold">
+                {view === 'shelf' ? 'Your shelf' : 'Your library'}
+              </h2>
+              <p className="text-sm text-libro-muted">
+                {books.length === 0
+                  ? 'Import a Spanish EPUB to get started'
+                  : `${books.length} book${books.length === 1 ? '' : 's'}`}
+              </p>
+            </div>
+          )}
+        </LibrarySubHeader>
+
+        <div
+          className={`flex min-h-0 flex-1 flex-col ${view === 'grid' ? 'overflow-auto' : 'overflow-hidden'}`}
+        >
+          {view === 'grid' && (
+            <CoverGrid books={books} onOpen={handleOpen} onDelete={handleDelete} />
+          )}
+          {view === 'coverflow' && (
+            <CoverFlowCarousel
+              books={books}
+              onOpen={handleOpen}
+              onFocusedBookChange={handleFocusedBookChange}
+            />
+          )}
+          {view === 'shelf' && (
+            <ShelfOverview books={books} onOpen={handleOpen} />
+          )}
+        </div>
       </main>
     </>
   )

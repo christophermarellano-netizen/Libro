@@ -4,7 +4,6 @@ import {
   defaultSpineHeight,
   getSpinePreset,
   scaledSpineWidth,
-  titleFontSize,
   type SpinePreset,
 } from '../../lib/spinePresets'
 
@@ -17,41 +16,78 @@ interface SpineViewProps {
   className?: string
 }
 
-function fitTitleFontSize(
-  container: HTMLElement,
-  titleEl: HTMLElement,
-  baseSize: number,
+const TITLE_MIN_PX = 5
+const AUTHOR_MIN_PX = 4
+const MAX_TITLE_FONT_PX = 100
+const FIT_SAFETY_PX = 2
+const SPINE_TEXT_INSET_PX = 4
+
+function fitsTitleInBox(
+  textEl: HTMLElement,
+  maxWidth: number,
+  maxHeight: number,
+): boolean {
+  const { width, height } = textEl.getBoundingClientRect()
+  return (
+    width <= maxWidth - FIT_SAFETY_PX &&
+    height <= maxHeight - FIT_SAFETY_PX
+  )
+}
+
+function fitsAuthorInBox(
+  textEl: HTMLElement,
+  maxWidth: number,
+  maxHeight: number,
+): boolean {
+  return (
+    textEl.scrollWidth <= maxWidth - FIT_SAFETY_PX &&
+    textEl.scrollHeight <= maxHeight - FIT_SAFETY_PX
+  )
+}
+
+function binarySearchFontSize(
+  textEl: HTMLElement,
+  maxWidth: number,
+  maxHeight: number,
+  minSize: number,
+  maxSize: number,
+  fits: (el: HTMLElement, w: number, h: number) => boolean,
 ): number {
-  const available = Math.max(0, container.clientHeight - 12)
-  if (available <= 0) return baseSize
+  if (maxWidth <= 0 || maxHeight <= 0) return minSize
 
-  let size = baseSize
-  titleEl.style.fontSize = `${size}px`
-  let extent = titleEl.offsetHeight
+  textEl.style.fontSize = `${maxSize}px`
+  if (fits(textEl, maxWidth, maxHeight)) return maxSize
 
-  while (size > 7 && extent > available) {
-    size -= 0.5
-    titleEl.style.fontSize = `${size}px`
-    extent = titleEl.offsetHeight
+  let lo = minSize
+  let hi = maxSize
+  for (let i = 0; i < 24; i++) {
+    if (hi - lo < 0.2) break
+    const mid = (lo + hi) / 2
+    textEl.style.fontSize = `${mid}px`
+    if (fits(textEl, maxWidth, maxHeight)) {
+      lo = mid
+    } else {
+      hi = mid
+    }
   }
 
-  return size
+  return Math.max(minSize, Math.round(lo * 10) / 10)
 }
 
 function SpineTitle({
   title,
   preset,
-  baseSize,
   bookId,
 }: {
   title: string
   preset: SpinePreset
-  baseSize: number
   bookId?: number
 }) {
   const containerRef = useRef<HTMLSpanElement>(null)
   const titleRef = useRef<HTMLSpanElement>(null)
-  const [fontSize, setFontSize] = useState(baseSize)
+  const [fontSize, setFontSize] = useState<number | null>(null)
+
+  const displayTitle = preset.upper ? title.toUpperCase() : title
 
   useLayoutEffect(() => {
     const container = containerRef.current
@@ -59,8 +95,16 @@ function SpineTitle({
     if (!container || !titleEl) return
 
     const measureAndFit = () => {
-      titleEl.style.fontSize = `${baseSize}px`
-      const fitted = fitTitleFontSize(container, titleEl, baseSize)
+      if (container.clientWidth <= 0 || container.clientHeight <= 0) return
+      const fitted = binarySearchFontSize(
+        titleEl,
+        container.clientWidth,
+        container.clientHeight,
+        TITLE_MIN_PX,
+        MAX_TITLE_FONT_PX,
+        fitsTitleInBox,
+      )
+      titleEl.style.fontSize = `${fitted}px`
       setFontSize(fitted)
     }
 
@@ -68,14 +112,13 @@ function SpineTitle({
     const ro = new ResizeObserver(measureAndFit)
     ro.observe(container)
     return () => ro.disconnect()
-  }, [title, baseSize, preset.upper, preset.tracking, bookId])
-
-  const displayTitle = preset.upper ? title.toUpperCase() : title
+  }, [title, preset.upper, preset.tracking, bookId, displayTitle, preset])
 
   return (
     <span
       ref={containerRef}
-      className="flex min-h-0 flex-1 items-center justify-center overflow-hidden py-2"
+      className="flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+      style={{ paddingInline: SPINE_TEXT_INSET_PX }}
     >
       <span
         ref={titleRef}
@@ -83,9 +126,11 @@ function SpineTitle({
         style={{
           writingMode: 'vertical-rl',
           textOrientation: 'mixed',
-          fontSize,
-          letterSpacing: preset.upper ? (preset.tracking ?? '1px') : '0.4px',
+          fontSize: fontSize ?? TITLE_MIN_PX,
+          visibility: fontSize == null ? 'hidden' : 'visible',
+          letterSpacing: preset.upper ? (preset.tracking ?? '1px') : '0.35px',
           textTransform: preset.upper ? 'uppercase' : 'none',
+          lineHeight: 1.05,
         }}
       >
         {displayTitle}
@@ -94,10 +139,16 @@ function SpineTitle({
   )
 }
 
-function SpineAuthor({ author, bookId }: { author: string; bookId?: number }) {
+function SpineAuthor({
+  author,
+  bookId,
+}: {
+  author: string
+  bookId?: number
+}) {
   const containerRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
-  const [fontSize, setFontSize] = useState(11)
+  const [fontSize, setFontSize] = useState<number | null>(null)
 
   useLayoutEffect(() => {
     const container = containerRef.current
@@ -105,20 +156,28 @@ function SpineAuthor({ author, bookId }: { author: string; bookId?: number }) {
     if (!container || !textEl) return
 
     const measureAndFit = () => {
-      const baseSize = 11
-      textEl.style.fontSize = `${baseSize}px`
-      const available = Math.max(0, container.clientHeight - 4)
-      const extentAtBase = textEl.scrollHeight
-      let size = baseSize
-      let extent = extentAtBase
+      if (container.clientWidth <= 0 || container.clientHeight <= 0) return
+      const availableWidth = container.clientWidth
+      const availableHeight = container.clientHeight
+      textEl.style.maxWidth = `${availableWidth}px`
+      textEl.style.display = 'block'
 
-      while (size > 8 && extent > available) {
-        size -= 0.5
-        textEl.style.fontSize = `${size}px`
-        extent = textEl.scrollHeight
-      }
+      const maxAuthorSize = Math.min(
+        availableHeight * 0.72,
+        availableWidth * 0.95,
+        11,
+      )
 
-      setFontSize(size)
+      const fitted = binarySearchFontSize(
+        textEl,
+        availableWidth,
+        availableHeight,
+        AUTHOR_MIN_PX,
+        Math.max(AUTHOR_MIN_PX, maxAuthorSize),
+        fitsAuthorInBox,
+      )
+      textEl.style.fontSize = `${fitted}px`
+      setFontSize(fitted)
     }
 
     measureAndFit()
@@ -130,12 +189,21 @@ function SpineAuthor({ author, bookId }: { author: string; bookId?: number }) {
   return (
     <span
       ref={containerRef}
-      className="mt-2 flex min-h-[2.9em] w-full shrink-0 items-end justify-center px-2"
+      className="flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+      style={{ paddingInline: SPINE_TEXT_INSET_PX }}
     >
       <span
         ref={textRef}
-        className="line-clamp-2 max-w-full break-words text-center leading-snug opacity-60"
-        style={{ fontSize }}
+        className="mx-auto block text-center opacity-60"
+        style={{
+          fontSize: fontSize ?? AUTHOR_MIN_PX,
+          visibility: fontSize == null ? 'hidden' : 'visible',
+          lineHeight: 1.1,
+          wordBreak: 'normal',
+          overflowWrap: 'normal',
+          hyphens: 'none',
+          WebkitHyphens: 'none',
+        }}
       >
         {author}
       </span>
@@ -157,34 +225,51 @@ function SpineContent({
   className: string
 }) {
   const preset = getSpinePreset(book)
-  const titleSize = titleFontSize(book.title)
+  const topPad = Math.max(4, Math.round(heightPx * 0.025))
+  const bottomPad = Math.max(3, Math.round(heightPx * 0.018))
+  const ornamentH = 1
+  const titleFlex = 4
+  const authorFlex = 1
+  const titleZoneHeight = Math.max(
+    0,
+    heightPx - topPad - bottomPad - ornamentH * 2 - 4,
+  )
+  const authorZoneHeight = (titleZoneHeight * authorFlex) / (titleFlex + authorFlex)
+  const computedTitleZoneHeight = titleZoneHeight - authorZoneHeight
 
   return (
     <div
       data-spine-root
-      className={`flex shrink-0 flex-col items-center pb-3 pt-3.5 shadow-none ${className}`}
+      className={`flex shrink-0 flex-col items-center overflow-hidden shadow-none ${className}`}
       style={{
         width: widthPx,
         height: heightPx,
         backgroundColor: preset.bg,
         color: preset.fg,
         fontFamily: preset.font,
+        paddingTop: topPad,
+        paddingBottom: bottomPad,
       }}
     >
       {showText && (
         <>
-          <span className="w-[52%] shrink-0 border-t-[0.5px] border-current opacity-40" />
+          <span className="mb-1 w-[52%] shrink-0 border-t-[0.5px] border-current opacity-40" />
 
-          <SpineTitle
-            title={book.title}
-            preset={preset}
-            baseSize={titleSize}
-            bookId={book.id}
-          />
+          <div
+            className="flex w-full flex-col items-center overflow-hidden"
+            style={{ height: computedTitleZoneHeight, minHeight: 0 }}
+          >
+            <SpineTitle title={book.title} preset={preset} bookId={book.id} />
+          </div>
 
-          <span className="w-[52%] shrink-0 border-t-[0.5px] border-current opacity-40" />
+          <span className="my-0.5 w-[52%] shrink-0 border-t-[0.5px] border-current opacity-40" />
 
-          <SpineAuthor author={book.author} bookId={book.id} />
+          <div
+            className="flex w-full flex-col items-center overflow-hidden"
+            style={{ height: authorZoneHeight, minHeight: 0 }}
+          >
+            <SpineAuthor author={book.author} bookId={book.id} />
+          </div>
         </>
       )}
     </div>

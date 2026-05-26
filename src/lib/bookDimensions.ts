@@ -87,10 +87,13 @@ export function dimensionsFromPageCount(pageCount: number): {
   }
 }
 
+/** Shared tallest-book target height for library row views (grid, coverflow). */
+export const LIBRARY_ROW_TARGET_HEIGHT = 300
+
 /** Scale factor so the tallest book renders at `targetTallestPx`. */
 export function libraryDisplayScale(
   books: Array<{ physicalHeightMm: number }>,
-  targetTallestPx = 220,
+  targetTallestPx = LIBRARY_ROW_TARGET_HEIGHT,
 ): number {
   if (books.length === 0) return 1
   const maxHeightMm = Math.max(...books.map((b) => b.physicalHeightMm), 1)

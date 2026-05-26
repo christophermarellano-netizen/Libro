@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion'
+import { motion, useMotionValue, animate } from 'framer-motion'
 import type { Book } from '../../types'
-import { displaySizePx, libraryDisplayScale } from '../../lib/bookDimensions'
+import { displaySizePx, libraryDisplayScale, LIBRARY_ROW_TARGET_HEIGHT } from '../../lib/bookDimensions'
+import { isSeedPlaceholderBook } from '../../lib/placeholderBooks'
 import { getSpinePreset } from '../../lib/spinePresets'
 import { SpineView, spineWidthPx } from './SpineView'
+import jointSeamSrc from '../../assets/joint-seam.png'
 
 interface CoverFlowCarouselProps {
   books: Book[]
   onOpen: (book: Book) => void
+  onFocusedBookChange?: (book: Book | null) => void
 }
 
-const ROW_TARGET_HEIGHT = 300
 const ITEM_GAP = 4
-const TURN_CLEARANCE = 56
+const TURN_CLEARANCE = 28
 const TURN_DURATION_MS = 460
-const FOCUS_OVERLAP_DELAY_MS = 140
 const DRAG_THRESHOLD_PX = 12
 
 const turnTransition = {
@@ -41,10 +42,10 @@ function debugCoverFlow(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Debug-Session-Id': 'fc02e7',
+      'X-Debug-Session-Id': '91d08a',
     },
     body: JSON.stringify({
-      sessionId: 'fc02e7',
+      sessionId: '91d08a',
       runId: 'pre-fix',
       hypothesisId,
       location,
@@ -70,7 +71,6 @@ type BookMode = 'spine' | 'focused' | 'closing'
 
 function CoverFlowBook({
   book,
-  coverSrc,
   slotWidth,
   coverWidth,
   height,
@@ -84,7 +84,6 @@ function CoverFlowBook({
   onCoverError,
 }: {
   book: Book
-  coverSrc: string
   slotWidth: number
   coverWidth: number
   height: number
@@ -105,6 +104,23 @@ function CoverFlowBook({
   const isFocused = mode === 'focused'
   const isClosing = mode === 'closing'
   const isActiveBook = mode !== 'spine'
+  const coverSrc = useMemo(() => {
+    if (!isActiveBook || useFallbackCover || !book.coverBlob || book.coverBlob.size === 0) {
+      return null
+    }
+    return URL.createObjectURL(book.coverBlob)
+  }, [
+    isActiveBook,
+    useFallbackCover,
+    book.id,
+    book.coverBlob?.size,
+    book.coverBlob?.type,
+  ])
+
+  useEffect(() => {
+    if (!coverSrc) return
+    return () => URL.revokeObjectURL(coverSrc)
+  }, [coverSrc])
   const bookTurnTransition = mode === 'closing' ? closeTurnTransition : turnTransition
   const handleClick = () => {
     // #region agent log
@@ -142,22 +158,21 @@ function CoverFlowBook({
       }}
       transition={bookTurnTransition}
     >
-      <div
-        className="absolute bottom-0 left-0"
-        style={{ visibility: isActiveBook ? 'hidden' : 'visible' }}
-      >
-        <SpineView
-          book={book}
-          heightPx={height}
-          widthPx={sideWidth}
-          showText
-          className="shadow-[0_4px_12px_rgba(0,0,0,0.12)]"
-        />
-      </div>
+      {!isActiveBook && (
+        <div className="absolute bottom-0 left-0">
+          <SpineView
+            book={book}
+            heightPx={height}
+            widthPx={sideWidth}
+            showText
+            className="rounded-[1.5px] shadow-[0_4px_12px_rgba(0,0,0,0.12)]"
+          />
+        </div>
+      )}
 
       {isActiveBook && (
         <motion.div
-          className="absolute bottom-0 left-0 shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
+          className="absolute bottom-0 left-0 overflow-hidden rounded-[1.5px] shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
           style={{
             left: sideWidth,
             width: coverWidth,
@@ -172,7 +187,7 @@ function CoverFlowBook({
           }}
           transition={bookTurnTransition}
         >
-          {useFallbackCover ? (
+          {useFallbackCover || coverSrc == null ? (
             <div
               className="h-full w-full"
               style={{ backgroundColor: fallbackBg, color: fallbackFg }}
@@ -186,12 +201,21 @@ function CoverFlowBook({
               onError={onCoverError}
             />
           )}
+          {isFocused && (
+            <img
+              src={jointSeamSrc}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute top-0 z-10 h-full select-none object-fill"
+              style={{ left: 4, width: 9 }}
+            />
+          )}
         </motion.div>
       )}
 
       {isActiveBook && (
         <motion.div
-          className="absolute bottom-0 left-0 top-0 overflow-hidden shadow-[-6px_0_14px_rgba(0,0,0,0.16)_inset]"
+          className="absolute bottom-0 left-0 top-0 overflow-hidden rounded-[1.5px] shadow-[-6px_0_14px_rgba(0,0,0,0.16)_inset]"
           style={{
             width: sideWidth,
             transformOrigin: 'right center',
@@ -205,8 +229,8 @@ function CoverFlowBook({
             book={book}
             heightPx={height}
             widthPx={sideWidth}
-            showText
-            className="shadow-[-6px_0_14px_rgba(0,0,0,0.16)_inset]"
+            showText={!isFocused}
+            className="rounded-[1.5px] shadow-[-6px_0_14px_rgba(0,0,0,0.16)_inset]"
           />
         </motion.div>
       )}
@@ -214,7 +238,11 @@ function CoverFlowBook({
   )
 }
 
-export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
+export function CoverFlowCarousel({
+  books,
+  onOpen,
+  onFocusedBookChange,
+}: CoverFlowCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [closingIndex, setClosingIndex] = useState<number | null>(null)
@@ -226,15 +254,22 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
   const suppressClick = useRef(false)
   const suppressReset = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
-  const focusTimer = useRef<number | null>(null)
-  const pendingFocusIndex = useRef<number | null>(null)
   const hasInitializedScroll = useRef(false)
 
   const activeCoverIndex = focusedIndex ?? closingIndex
   const focusedBook =
     activeCoverIndex == null ? null : books[activeCoverIndex]
+
+  useEffect(() => {
+    onFocusedBookChange?.(focusedBook)
+  }, [focusedBook, onFocusedBookChange])
+
+  useEffect(() => {
+    return () => onFocusedBookChange?.(null)
+  }, [onFocusedBookChange])
+
   const rowScale = useMemo(
-    () => libraryDisplayScale(books, ROW_TARGET_HEIGHT),
+    () => libraryDisplayScale(books, LIBRARY_ROW_TARGET_HEIGHT),
     [books],
   )
   const bookSize = useCallback(
@@ -246,52 +281,30 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
     [bookSize],
   )
 
-  const coverUrls = useMemo(() => {
-    const urls = new Map<number, string>()
-    books.forEach((book) => {
-      if (book.id !== undefined && book.coverBlob) {
-        urls.set(book.id, URL.createObjectURL(book.coverBlob))
-      }
-    })
-    return urls
-  }, [books])
-
-  useEffect(() => {
-    return () => {
-      coverUrls.forEach((url) => URL.revokeObjectURL(url))
-    }
-  }, [coverUrls])
-
   const slotWidth = useCallback(
-    (index: number, focusIdx: number | null, closeIdx: number | null = null) => {
+    (index: number, focusIdx: number | null) => {
       const book = books[index]
       const spineSlotWidth = Math.max(18, Math.min(spineWidthPx(book, spineHeightPx(book)), 42))
-
       if (index === focusIdx) {
         return bookSize(book).widthPx + TURN_CLEARANCE * 2
       }
-
-      if (index === closeIdx) {
-        return TURN_CLEARANCE
-      }
-
       return spineSlotWidth
     },
     [books, bookSize, spineHeightPx],
   )
 
   const getOffsetForIndex = useCallback(
-    (index: number, focusIdx: number, closeIdx: number | null = null) => {
+    (index: number, focusIdx: number) => {
       if (!containerRef.current) return 0
       const containerWidth = containerRef.current.offsetWidth
       if (containerWidth === 0) return 0
       let x = 0
 
       for (let i = 0; i < index; i++) {
-        x += slotWidth(i, focusIdx, closeIdx) + ITEM_GAP
+        x += slotWidth(i, focusIdx) + ITEM_GAP
       }
 
-      x += slotWidth(index, focusIdx, closeIdx) / 2
+      x += slotWidth(index, focusIdx) / 2
       return containerWidth / 2 - x
     },
     [slotWidth],
@@ -301,14 +314,11 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
     (index: number, animateScroll = true) => {
       const offset = getOffsetForIndex(index, index)
       // #region agent log
-      debugCoverFlow('H4', 'CoverFlowCarousel.tsx:276', 'centerOnIndex computed offset', {
+      debugCoverFlow('H4', 'CoverFlowCarousel.tsx:276', 'centerOnIndex', {
         index,
         offset,
         animateScroll,
         hasInitializedScroll: hasInitializedScroll.current,
-        focusedIndex,
-        closingIndex,
-        containerWidth: containerRef.current?.offsetWidth ?? null,
         currentScrollX: scrollX.get(),
       })
       // #endregion
@@ -320,7 +330,7 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
       hasInitializedScroll.current = true
       return offset
     },
-    [closingIndex, focusedIndex, getOffsetForIndex, scrollX],
+    [getOffsetForIndex, scrollX],
   )
 
   const findNearestIndex = useCallback(
@@ -345,9 +355,7 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
     debugCoverFlow('H7', 'CoverFlowCarousel.tsx:343', 'focus state changed', {
       focusedIndex,
       closingIndex,
-      pendingFocusIndex: pendingFocusIndex.current,
       hasCloseTimer: closeTimer.current != null,
-      hasFocusTimer: focusTimer.current != null,
       scrollX: scrollX.get(),
     })
     // #endregion
@@ -355,14 +363,13 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
 
   useLayoutEffect(() => {
     if (books.length === 0) return
-    if (focusedIndex == null && closingIndex == null) {
+    if (focusedIndex == null) {
       const initialIndex = findNearestIndex(scrollX.get())
       setFocusedIndex(initialIndex)
       return
     }
-    if (focusedIndex == null) return
     centerOnIndex(focusedIndex, hasInitializedScroll.current)
-  }, [books, focusedIndex, closingIndex, centerOnIndex, findNearestIndex, scrollX])
+  }, [books, focusedIndex, centerOnIndex, findNearestIndex, scrollX])
 
   useEffect(() => {
     const el = containerRef.current
@@ -377,7 +384,6 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
   useEffect(() => {
     return () => {
       if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
-      if (focusTimer.current != null) window.clearTimeout(focusTimer.current)
       if (suppressReset.current != null) window.clearTimeout(suppressReset.current)
     }
   }, [])
@@ -390,75 +396,27 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
         focusedIndex,
         closingIndex,
         hasCloseTimer: closeTimer.current != null,
-        hasFocusTimer: focusTimer.current != null,
-        pendingFocusIndex: pendingFocusIndex.current,
         currentScrollX: scrollX.get(),
       })
       // #endregion
       if (index === focusedIndex && closingIndex == null) return
-      centerOnIndex(index, true)
 
       if (closeTimer.current != null) {
-        // #region agent log
-        debugCoverFlow('H3', 'CoverFlowCarousel.tsx:355', 'requestFocus deferred during close timer', {
-          index,
-          focusedIndex,
-          closingIndex,
-        })
-        // #endregion
-        pendingFocusIndex.current = index
-        if (focusedIndex != null && focusedIndex !== index) {
-          setFocusedIndex(index)
-        }
-        return
+        window.clearTimeout(closeTimer.current)
+        closeTimer.current = null
       }
 
-      if (focusedIndex != null && focusedIndex !== index) {
-        // #region agent log
-        debugCoverFlow('H3', 'CoverFlowCarousel.tsx:367', 'requestFocus starts close-open sequence', {
-          index,
-          previousFocusedIndex: focusedIndex,
-          closingIndex,
-        })
-        // #endregion
-        setClosingIndex(focusedIndex)
-        setFocusedIndex(null)
-        pendingFocusIndex.current = index
-        focusTimer.current = window.setTimeout(() => {
-          const nextIndex = pendingFocusIndex.current ?? index
-          // #region agent log
-          debugCoverFlow('H8', 'CoverFlowCarousel.tsx:435', 'focus timer fires', {
-            nextIndex,
-            closingIndex: focusedIndex,
-            scrollX: scrollX.get(),
-          })
-          // #endregion
-          setFocusedIndex(nextIndex)
-          pendingFocusIndex.current = null
-          focusTimer.current = null
-        }, FOCUS_OVERLAP_DELAY_MS)
+      const prevFocused = focusedIndex
+      setFocusedIndex(index)
+      centerOnIndex(index, true)
+
+      if (prevFocused != null && prevFocused !== index) {
+        setClosingIndex(prevFocused)
         closeTimer.current = window.setTimeout(() => {
-          // #region agent log
-          debugCoverFlow('H7', 'CoverFlowCarousel.tsx:446', 'close timer clears closing index', {
-            closingIndex: focusedIndex,
-            pendingFocusIndex: pendingFocusIndex.current,
-            scrollX: scrollX.get(),
-          })
-          // #endregion
           setClosingIndex(null)
           closeTimer.current = null
         }, TURN_DURATION_MS)
-        return
       }
-
-      setFocusedIndex(index)
-      // #region agent log
-      debugCoverFlow('H3', 'CoverFlowCarousel.tsx:388', 'requestFocus sets focused immediately', {
-        index,
-        closingIndex,
-      })
-      // #endregion
-      pendingFocusIndex.current = null
     },
     [centerOnIndex, closingIndex, focusedIndex, scrollX],
   )
@@ -619,38 +577,14 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
 
   if (books.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-libro-muted">
+      <div className="flex h-full min-h-0 flex-1 items-center justify-center text-libro-muted">
         Import books to see the cover flow
       </div>
     )
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 px-4 pt-6 text-center">
-        {focusedBook ? (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={focusedBook.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-            >
-              <h2 className="text-lg font-semibold">{focusedBook.title}</h2>
-              <p className="text-sm text-libro-muted">{focusedBook.author}</p>
-            </motion.div>
-          </AnimatePresence>
-        ) : (
-          <div>
-            <h2 className="text-lg font-semibold">Select a book</h2>
-            <p className="text-sm text-libro-muted">
-              Click a spine to center it and show its cover
-            </p>
-          </div>
-        )}
-      </div>
-
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={containerRef}
         className="relative min-h-0 flex-1 cursor-grab overflow-hidden touch-none active:cursor-grabbing"
@@ -683,44 +617,21 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
                 i === focusedIndex ? 'focused' : i === closingIndex ? 'closing' : 'spine'
               const isActiveBook = mode !== 'spine'
               const coverKey = book.id != null ? String(book.id) : `${book.title}|${book.author}`
-              const coverSrc =
-                book.id !== undefined ? coverUrls.get(book.id) ?? '' : ''
               const preset = getSpinePreset(book)
               const fallbackBg = preset.bg
               const fallbackFg = preset.fg
+              const isMockBook =
+                book.coverSource === 'placeholder' && isSeedPlaceholderBook(book)
+              const hasCoverBlob = Boolean(book.coverBlob && book.coverBlob.size > 0)
               const useFallbackCover =
-                book.coverSource === 'placeholder' ||
-                coverSrc === '' ||
-                failedCovers.has(coverKey)
-              const width = slotWidth(i, focusedIndex, closingIndex)
+                isMockBook || !hasCoverBlob || failedCovers.has(coverKey)
+              const width = slotWidth(i, focusedIndex)
               const visualCoverWidth = bookSize(book).widthPx
               const height = bookSize(book).heightPx
               const spineWidth = Math.max(
                 18,
                 Math.min(spineWidthPx(book, spineHeightPx(book)), 42),
               )
-              const closingWidthKeyframes = [
-                visualCoverWidth + TURN_CLEARANCE * 2,
-                visualCoverWidth + TURN_CLEARANCE,
-                Math.round(visualCoverWidth * 0.74) + TURN_CLEARANCE,
-                Math.round(visualCoverWidth * 0.36) + TURN_CLEARANCE,
-                TURN_CLEARANCE,
-              ]
-              if (mode !== 'spine') {
-                // #region agent log
-                debugCoverFlow('H9', 'CoverFlowCarousel.tsx:593', 'active item render targets', {
-                  index: i,
-                  mode,
-                  width,
-                  slotWidth: isActiveBook ? visualCoverWidth : spineWidth,
-                  visualCoverWidth,
-                  spineWidth,
-                  closingWidthKeyframes: mode === 'closing' ? closingWidthKeyframes : null,
-                  focusedIndex,
-                  closingIndex,
-                })
-                // #endregion
-              }
 
               return (
                 <motion.div
@@ -729,12 +640,11 @@ export function CoverFlowCarousel({ books, onOpen }: CoverFlowCarouselProps) {
                   className="relative shrink-0 overflow-visible"
                   style={{ height, zIndex: isActiveBook ? 10 : 1 }}
                   initial={false}
-                  animate={{ width: mode === 'closing' ? closingWidthKeyframes : width }}
-                  transition={mode === 'closing' ? closeTurnTransition : turnTransition}
+                  animate={{ width }}
+                  transition={scrollTransition}
                 >
                   <CoverFlowBook
                     book={book}
-                    coverSrc={coverSrc}
                     slotWidth={isActiveBook ? visualCoverWidth : spineWidth}
                     coverWidth={visualCoverWidth}
                     height={height}

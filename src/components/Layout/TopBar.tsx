@@ -1,59 +1,32 @@
 import { Link } from 'react-router-dom'
 import { ImportButton } from '../Library/ImportButton'
 import { ViewToggle } from '../Library/ViewToggle'
-import type { LibrarySort, LibraryView } from '../../types'
+import type { LibraryView } from '../../types'
 
 interface TopBarProps {
   view: LibraryView
-  sort: LibrarySort
   onViewChange: (view: LibraryView) => void
-  onSortChange: (sort: LibrarySort) => void
   onImport: (files: FileList) => void
   importing?: boolean
 }
 
 export function TopBar({
   view,
-  sort,
   onViewChange,
-  onSortChange,
   onImport,
   importing,
 }: TopBarProps) {
   return (
-    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-libro-border bg-libro-surface px-5 py-3">
-      <h1 className="text-[22px] font-semibold tracking-tight text-libro-text">
+    <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-libro-border bg-libro-surface px-5 py-3">
+      <h1 className="relative z-10 text-[22px] font-semibold tracking-tight text-libro-text">
         Libro
       </h1>
 
-      <ViewToggle view={view} onChange={onViewChange} />
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <ViewToggle view={view} onChange={onViewChange} />
+      </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <select
-            value={sort}
-            onChange={(e) => onSortChange(e.target.value as LibrarySort)}
-            className="appearance-none rounded-lg border border-libro-border bg-libro-bg py-1.5 pl-3 pr-8 text-sm text-libro-text"
-          >
-            <option value="recent">Recent</option>
-            <option value="title">Title</option>
-            <option value="author">Author</option>
-          </select>
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden
-            className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-libro-muted"
-          >
-            <path
-              d="M7 10l5 5 5-5"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+      <div className="relative z-10 flex items-center gap-3">
         <ImportButton onImport={onImport} importing={importing} />
         <Link
           to="/settings"

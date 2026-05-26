@@ -68,6 +68,13 @@ const PLACEHOLDER_SPECS: PlaceholderSpec[] = [
 ]
 
 const PLACEHOLDER_TITLES = new Set(PLACEHOLDER_SPECS.map((s) => s.title))
+const PLACEHOLDER_BOOK_KEYS = new Set(
+  PLACEHOLDER_SPECS.map((s) => `${s.title}|${s.author}`),
+)
+
+export function isSeedPlaceholderBook(book: Pick<Book, 'title' | 'author'>): boolean {
+  return PLACEHOLDER_BOOK_KEYS.has(`${book.title}|${book.author}`)
+}
 
 function specForTitle(title: string): PlaceholderSpec | undefined {
   return PLACEHOLDER_SPECS.find((s) => s.title === title)
