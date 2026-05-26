@@ -1,0 +1,312 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-libro-bg: #f5f5f5;
+  --color-libro-surface: #ffffff;
+  --color-libro-accent: #1a1a1a;
+  --color-libro-text: #1a1a1a;
+  --color-libro-muted: #8e8e93;
+  --color-libro-border: #e5e5e5;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-libro-bg);
+  color: var(--color-libro-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.epub-container {
+  background: transparent !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.epub-container > div {
+  overflow: visible !important;
+}
+
+.epub-container iframe {
+  background: transparent !important;
+}
+
+.reader-scroll {
+  height: 100%;
+  pointer-events: auto;
+}
+
+.reader-scroll .epub-container {
+  padding: 1rem 1.25rem 2rem;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 0;
+}
+
+.reader-scroll .epub-container iframe {
+  position: relative;
+  z-index: 0;
+}
+
+.reader-light .epub-container iframe {
+  background: #fff !important;
+}
+
+.reader-dark .epub-container iframe {
+  background: #1c1c1e !important;
+}
+
+.reader-sepia .epub-container iframe {
+  background: #f4ecd8 !important;
+}
+
+/* ── Apple Books reader chrome ── */
+
+.reader-light,
+.reader-light [data-reader-theme='light'] {
+  --reader-chrome-bg: rgba(249, 249, 249, 0.92);
+  --reader-chrome-border: rgba(60, 60, 67, 0.16);
+  --reader-chrome-text: rgba(0, 0, 0, 0.88);
+  --reader-chrome-secondary: rgba(60, 60, 67, 0.6);
+  --reader-chrome-icon: rgba(60, 60, 67, 0.85);
+  --reader-chrome-link: #007aff;
+  --reader-tint: #ff9500;
+  --reader-sheet-bg: #f2f2f7;
+  --reader-segmented-bg: rgba(118, 118, 128, 0.12);
+  --reader-segmented-active: #ffffff;
+  --reader-panel-bg: #ffffff;
+  --reader-search-bg: rgba(118, 118, 128, 0.12);
+  --reader-row-hover: rgba(60, 60, 67, 0.06);
+  --reader-scrubber-track: rgba(60, 60, 67, 0.18);
+  --reader-sheet-circle: rgba(118, 118, 128, 0.12);
+}
+
+.reader-sepia,
+.reader-sepia [data-reader-theme='sepia'] {
+  --reader-chrome-bg: rgba(244, 236, 216, 0.94);
+  --reader-chrome-border: rgba(91, 70, 54, 0.14);
+  --reader-chrome-text: rgba(59, 45, 34, 0.92);
+  --reader-chrome-secondary: rgba(91, 70, 54, 0.58);
+  --reader-chrome-icon: rgba(91, 70, 54, 0.82);
+  --reader-chrome-link: #007aff;
+  --reader-tint: #ff9500;
+  --reader-sheet-bg: #ece3cf;
+  --reader-segmented-bg: rgba(91, 70, 54, 0.12);
+  --reader-segmented-active: #f7f0df;
+  --reader-panel-bg: #f4ecd8;
+  --reader-search-bg: rgba(91, 70, 54, 0.1);
+  --reader-row-hover: rgba(91, 70, 54, 0.06);
+  --reader-scrubber-track: rgba(91, 70, 54, 0.18);
+  --reader-sheet-circle: rgba(91, 70, 54, 0.12);
+}
+
+.reader-dark,
+.reader-dark [data-reader-theme='dark'] {
+  --reader-chrome-bg: rgba(28, 28, 30, 0.92);
+  --reader-chrome-border: rgba(255, 255, 255, 0.08);
+  --reader-chrome-text: rgba(255, 255, 255, 0.92);
+  --reader-chrome-secondary: rgba(235, 235, 245, 0.6);
+  --reader-chrome-icon: rgba(235, 235, 245, 0.82);
+  --reader-chrome-link: #0a84ff;
+  --reader-tint: #ff9500;
+  --reader-sheet-bg: #1c1c1e;
+  --reader-segmented-bg: rgba(118, 118, 128, 0.24);
+  --reader-segmented-active: #636366;
+  --reader-panel-bg: #1c1c1e;
+  --reader-search-bg: rgba(118, 118, 128, 0.24);
+  --reader-row-hover: rgba(255, 255, 255, 0.06);
+  --reader-scrubber-track: rgba(255, 255, 255, 0.18);
+  --reader-sheet-circle: rgba(118, 118, 128, 0.24);
+}
+
+.reader-chrome-top,
+.reader-chrome-bottom {
+  background: var(--reader-chrome-bg);
+  border-color: var(--reader-chrome-border);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+.reader-chrome-top {
+  border-bottom-width: 0.5px;
+  border-bottom-style: solid;
+}
+
+.reader-chrome-title {
+  color: var(--reader-chrome-text);
+}
+
+.reader-chrome-subtitle {
+  color: var(--reader-chrome-secondary);
+}
+
+.reader-chrome-link {
+  color: var(--reader-chrome-link);
+}
+
+.reader-chrome-icon-btn {
+  color: var(--reader-chrome-icon);
+}
+
+.reader-chrome-icon-btn:active {
+  opacity: 0.55;
+}
+
+.reader-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reader-scrubber::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--reader-tint) 0%,
+    var(--reader-tint) var(--scrubber-fill, 0%),
+    var(--reader-scrubber-track) var(--scrubber-fill, 0%),
+    var(--reader-scrubber-track) 100%
+  );
+}
+
+.reader-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--reader-tint);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+
+.reader-scrubber::-moz-range-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--reader-scrubber-track);
+}
+
+.reader-scrubber::-moz-range-progress {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--reader-tint);
+}
+
+.reader-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--reader-tint);
+}
+
+.reader-sheet {
+  background: var(--reader-sheet-bg);
+  color: var(--reader-chrome-text);
+}
+
+.reader-sheet-grabber {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.3);
+}
+
+.reader-dark .reader-sheet-grabber {
+  background: rgba(235, 235, 245, 0.3);
+}
+
+.reader-sheet-circle {
+  background: var(--reader-sheet-circle);
+  color: var(--reader-chrome-text);
+}
+
+.reader-sheet-slider,
+.reader-scrubber {
+  accent-color: var(--reader-tint);
+}
+
+.reader-sheet-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+}
+
+.reader-sheet-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--reader-scrubber-track);
+}
+
+.reader-sheet-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -13px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.reader-dark .reader-sheet-slider::-webkit-slider-thumb {
+  background: #f2f2f7;
+}
+
+.reader-segmented {
+  background: var(--reader-segmented-bg);
+  border-radius: 9px;
+}
+
+.reader-segmented-active {
+  background: var(--reader-segmented-active);
+  color: var(--reader-chrome-text);
+}
+
+.reader-panel {
+  background: var(--reader-panel-bg);
+  color: var(--reader-chrome-text);
+}
+
+.reader-search-field {
+  background: var(--reader-search-bg);
+  color: var(--reader-chrome-text);
+}
+
+.reader-list-row {
+  border-bottom: 0.5px solid var(--reader-chrome-border);
+  color: var(--reader-chrome-text);
+}
+
+.reader-list-row:hover,
+.reader-list-row:active {
+  background: var(--reader-row-hover);
+}
+
+.reader-list-row {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
