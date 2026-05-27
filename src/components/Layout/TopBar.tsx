@@ -10,12 +10,14 @@ interface TopBarProps {
 export function TopBar({ view, onViewChange }: TopBarProps) {
   return (
     <header className="relative shrink-0 border-b border-libro-border bg-libro-surface">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))]">
-        <h1 className="justify-self-start font-['Lexend',sans-serif] text-[22px] font-semibold tracking-tight text-libro-text">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))]">
+        <h1 className="shrink-0 whitespace-nowrap font-['Lexend',sans-serif] text-[22px] font-semibold tracking-tight text-libro-text">
           EX LIBRO
         </h1>
 
-        <ViewToggle view={view} onChange={onViewChange} />
+        <div className="flex min-w-0 justify-center">
+          <ViewToggle view={view} onChange={onViewChange} />
+        </div>
 
         <div className="flex justify-self-end">
           <Link

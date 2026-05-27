@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react'
 import type { Rendition } from 'epubjs'
 
-export interface WordTapEvent {
-  word: string
+export interface ReaderTapEvent {
+  word: string | null
   sentence: string
   x: number
   y: number
 }
+
+/** @deprecated Use ReaderTapEvent */
+export type WordTapEvent = ReaderTapEvent & { word: string }
 
 interface EpubContents {
   document: Document
@@ -20,16 +23,20 @@ type EpubRendition = Rendition & {
     }
   }
   getContents: () => EpubContents[]
+  on: (event: string, fn: () => void) => void
+  off: (event: string, fn: () => void) => void
 }
 
 interface EpubViewerProps {
   containerRef: React.RefObject<HTMLDivElement | null>
   ready: boolean
   translationEnabled: boolean
-  onWordTap: (event: WordTapEvent) => void
-  onBackgroundTap?: () => void
+  onTap: (event: ReaderTapEvent) => void
   getRendition: () => Rendition | null
 }
+
+const TAP_MOVE_THRESHOLD_PX = 12
+const TAP_MAX_DURATION_MS = 600
 
 function extractWordFromRange(range: Range): string {
   let node = range.startContainer
@@ -103,34 +110,37 @@ function getIframe(doc: Document): HTMLIFrameElement | null {
   return doc.defaultView?.frameElement as HTMLIFrameElement | null
 }
 
-function eventCoords(event: Event): { x: number; y: number } | null {
-  if (event.type.startsWith('touch')) {
-    const touch = (event as TouchEvent).changedTouches?.[0] ?? (event as TouchEvent).touches?.[0]
-    if (touch) return { x: touch.clientX, y: touch.clientY }
+function toPageCoords(doc: Document, x: number, y: number) {
+  const iframe = getIframe(doc)
+  const iframeRect = iframe?.getBoundingClientRect()
+  return {
+    x: iframeRect ? iframeRect.left + x : x,
+    y: iframeRect ? iframeRect.top + y : y,
   }
+}
 
-  const mouse = event as MouseEvent
-  if (typeof mouse.clientX === 'number' && typeof mouse.clientY === 'number') {
-    return { x: mouse.clientX, y: mouse.clientY }
-  }
-
-  return null
+function isTapGesture(
+  start: { x: number; y: number; t: number },
+  endX: number,
+  endY: number,
+): boolean {
+  if (Math.abs(endX - start.x) > TAP_MOVE_THRESHOLD_PX) return false
+  if (Math.abs(endY - start.y) > TAP_MOVE_THRESHOLD_PX) return false
+  if (Date.now() - start.t > TAP_MAX_DURATION_MS) return false
+  return true
 }
 
 export function EpubViewer({
   containerRef,
   ready,
   translationEnabled,
-  onWordTap,
-  onBackgroundTap,
+  onTap,
   getRendition,
 }: EpubViewerProps) {
-  const onWordTapRef = useRef(onWordTap)
-  const onBackgroundTapRef = useRef(onBackgroundTap)
+  const onTapRef = useRef(onTap)
   const getRenditionRef = useRef(getRendition)
   const translationEnabledRef = useRef(translationEnabled)
-  onWordTapRef.current = onWordTap
-  onBackgroundTapRef.current = onBackgroundTap
+  onTapRef.current = onTap
   getRenditionRef.current = getRendition
   translationEnabledRef.current = translationEnabled
 
@@ -141,55 +151,36 @@ export function EpubViewer({
 
     const attachedDocs = new Set<Document>()
     const docCleanup = new Map<Document, () => void>()
+    const touchStarts = new WeakMap<Document, { x: number; y: number; t: number }>()
     let suppressClickUntil = 0
-    let lastBackgroundTapAt = 0
+    let lastTapAt = 0
 
-    const toggleBackground = () => {
+    const emitTap = (doc: Document, x: number, y: number) => {
       const now = Date.now()
-      if (now - lastBackgroundTapAt < 280) return
-      lastBackgroundTapAt = now
-      onBackgroundTapRef.current?.()
+      if (now - lastTapAt < 280) return
+      lastTapAt = now
+
+      const word = translationEnabledRef.current ? getWordAtPoint(doc, x, y) : ''
+      const page = toPageCoords(doc, x, y)
+
+      onTapRef.current({
+        word: word || null,
+        sentence: word ? getSentence(doc, x, y) : '',
+        x: page.x,
+        y: page.y,
+      })
     }
 
-    const handlePointer = (doc: Document, event: Event) => {
-      const coords = eventCoords(event)
-      if (!coords) return
+    const emitTapAtPagePoint = (x: number, y: number) => {
+      const now = Date.now()
+      if (now - lastTapAt < 280) return
+      lastTapAt = now
 
-      const word =
-        translationEnabledRef.current ? getWordAtPoint(doc, coords.x, coords.y) : ''
-
-      if (!word) {
-        if (event.type === 'touchend') {
-          event.preventDefault()
-          suppressClickUntil = Date.now() + 450
-          toggleBackground()
-        } else if (event.type === 'click') {
-          if (Date.now() < suppressClickUntil) return
-          toggleBackground()
-        }
-        return
-      }
-
-      if (event.type === 'touchend') {
-        suppressClickUntil = Date.now() + 450
-        event.preventDefault()
-      } else if (event.type === 'click' && Date.now() < suppressClickUntil) {
-        return
-      }
-
-      event.preventDefault()
-      event.stopPropagation()
-
-      const iframe = getIframe(doc)
-      const iframeRect = iframe?.getBoundingClientRect()
-      const pageX = iframeRect ? iframeRect.left + coords.x : coords.x
-      const pageY = iframeRect ? iframeRect.top + coords.y : coords.y
-
-      onWordTapRef.current({
-        word,
-        sentence: getSentence(doc, coords.x, coords.y),
-        x: pageX,
-        y: pageY,
+      onTapRef.current({
+        word: null,
+        sentence: '',
+        x,
+        y,
       })
     }
 
@@ -199,42 +190,110 @@ export function EpubViewer({
 
       doc.body.style.cursor = 'default'
       doc.body.style.setProperty('-webkit-tap-highlight-color', 'transparent')
+      doc.body.style.setProperty('touch-action', 'manipulation')
 
-      const onClick = (event: Event) => handlePointer(doc, event)
-      const onTouchEnd = (event: Event) => handlePointer(doc, event)
+      const onTouchStart = (event: TouchEvent) => {
+        const touch = event.touches[0]
+        if (!touch) return
+        touchStarts.set(doc, { x: touch.clientX, y: touch.clientY, t: Date.now() })
+      }
 
-      doc.addEventListener('click', onClick, true)
+      const onTouchEnd = (event: TouchEvent) => {
+        const start = touchStarts.get(doc)
+        touchStarts.delete(doc)
+        const touch = event.changedTouches[0]
+        if (!start || !touch) return
+        if (!isTapGesture(start, touch.clientX, touch.clientY)) return
+
+        event.preventDefault()
+        suppressClickUntil = Date.now() + 450
+        emitTap(doc, touch.clientX, touch.clientY)
+      }
+
+      const onClick = (event: MouseEvent) => {
+        if (Date.now() < suppressClickUntil) return
+        emitTap(doc, event.clientX, event.clientY)
+      }
+
+      doc.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
       doc.addEventListener('touchend', onTouchEnd, { capture: true, passive: false })
+      doc.addEventListener('click', onClick, true)
 
       docCleanup.set(doc, () => {
-        doc.removeEventListener('click', onClick, true)
+        doc.removeEventListener('touchstart', onTouchStart, true)
         doc.removeEventListener('touchend', onTouchEnd, true)
+        doc.removeEventListener('click', onClick, true)
       })
+    }
+
+    const syncContents = () => {
+      try {
+        rendition.getContents().forEach((contents) => {
+          if (contents?.document) attachDoc(contents.document)
+        })
+      } catch {
+        // getContents may fail before the first section renders
+      }
     }
 
     const contentHook = (contents: EpubContents) => {
       if (contents?.document) attachDoc(contents.document)
     }
 
-    rendition.hooks.content.register(contentHook)
+    const onRendered = () => syncContents()
 
-    try {
-      rendition.getContents().forEach((contents) => {
-        if (contents?.document) attachDoc(contents.document)
-      })
-    } catch {
-      // getContents may fail before the first section renders
+    rendition.hooks.content.register(contentHook)
+    rendition.on('rendered', onRendered)
+    syncContents()
+
+    const container = containerRef.current
+    let containerTouchStart: { x: number; y: number; t: number } | null = null
+
+    const onContainerTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0]
+      if (!touch) return
+      containerTouchStart = { x: touch.clientX, y: touch.clientY, t: Date.now() }
     }
+
+    const onContainerTouchEnd = (event: TouchEvent) => {
+      const start = containerTouchStart
+      containerTouchStart = null
+      const touch = event.changedTouches[0]
+      if (!start || !touch) return
+      if (!isTapGesture(start, touch.clientX, touch.clientY)) return
+
+      const target = event.target as Node | null
+      if (target instanceof HTMLIFrameElement && target.contentDocument) {
+        const rect = target.getBoundingClientRect()
+        emitTap(target.contentDocument, touch.clientX - rect.left, touch.clientY - rect.top)
+        return
+      }
+
+      const iframe = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('iframe')
+      if (iframe instanceof HTMLIFrameElement && iframe.contentDocument) {
+        const rect = iframe.getBoundingClientRect()
+        emitTap(iframe.contentDocument, touch.clientX - rect.left, touch.clientY - rect.top)
+        return
+      }
+
+      emitTapAtPagePoint(touch.clientX, touch.clientY)
+    }
+
+    container?.addEventListener('touchstart', onContainerTouchStart, { passive: true })
+    container?.addEventListener('touchend', onContainerTouchEnd, { passive: false })
 
     return () => {
       rendition.hooks.content.deregister(contentHook)
+      rendition.off('rendered', onRendered)
       attachedDocs.forEach((doc) => {
         docCleanup.get(doc)?.()
       })
       attachedDocs.clear()
       docCleanup.clear()
+      container?.removeEventListener('touchstart', onContainerTouchStart)
+      container?.removeEventListener('touchend', onContainerTouchEnd)
     }
-  }, [ready])
+  }, [ready, containerRef])
 
   return (
     <div className="reader-scroll h-full w-full overflow-hidden touch-manipulation">

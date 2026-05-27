@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ContentsPanel } from '../components/Reader/ContentsPanel'
-import { EpubViewer, type WordTapEvent } from '../components/Reader/EpubViewer'
+import { EpubViewer, type ReaderTapEvent } from '../components/Reader/EpubViewer'
 import { ReaderBottomBar } from '../components/Reader/ReaderBottomBar'
 import { ReaderLoadingOverlay } from '../components/Reader/ReaderLoadingOverlay'
 import { ReaderSettingsPanel } from '../components/Reader/SettingsPanel'
@@ -29,7 +29,9 @@ export function ReaderPage() {
 
   const [panel, setPanel] = useState<ReaderPanel>('none')
   const [chromeVisible, setChromeVisible] = useState(true)
-  const [tap, setTap] = useState<WordTapEvent | null>(null)
+  const chromeVisibleRef = useRef(chromeVisible)
+  chromeVisibleRef.current = chromeVisible
+  const [tap, setTap] = useState<ReaderTapEvent | null>(null)
   const [translation, setTranslation] = useState<string | null>(null)
   const [contextMode, setContextMode] = useState(false)
   const [toc, setToc] = useState<TocEntry[]>([])
@@ -107,15 +109,19 @@ export function ReaderPage() {
 
   const closePanel = () => setPanel('none')
 
-  const handleBackgroundTap = useCallback(() => {
-    if (panel !== 'none') return
-    setChromeVisible((v) => !v)
-  }, [panel])
+  const handleReaderTap = useCallback(
+    (event: ReaderTapEvent) => {
+      if (panel !== 'none') return
 
-  const handleWordTap = useCallback(
-    (event: WordTapEvent) => {
-      if (!translationEnabled) {
-        if (panel === 'none') setChromeVisible((visible) => !visible)
+      if (!chromeVisibleRef.current) {
+        setChromeVisible(true)
+        setTap(null)
+        return
+      }
+
+      if (!event.word || !translationEnabled) {
+        setChromeVisible(false)
+        setTap(null)
         return
       }
 
@@ -163,7 +169,7 @@ export function ReaderPage() {
   }
 
   const handleSave = async () => {
-    if (!tap || !translation || !bookId) return
+    if (!tap?.word || !translation || !bookId) return
     await saveVocab(bookId, tap.word, translation, contextMode ? tap.sentence : undefined)
     setTap(null)
   }
@@ -236,8 +242,7 @@ export function ReaderPage() {
           containerRef={containerRef}
           ready={ready}
           translationEnabled={translationEnabled}
-          onWordTap={handleWordTap}
-          onBackgroundTap={handleBackgroundTap}
+          onTap={handleReaderTap}
           getRendition={getRendition}
         />
       </div>
@@ -306,7 +311,7 @@ export function ReaderPage() {
         onSelect={(cfi) => void goToCfi(cfi)}
       />
 
-      {tap && translationEnabled && (
+      {tap?.word && translationEnabled && (
         <TranslationPopup
           word={contextMode ? 'Context' : tap.word}
           translation={translation}

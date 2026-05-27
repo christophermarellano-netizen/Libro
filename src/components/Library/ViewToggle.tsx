@@ -22,13 +22,13 @@ const views: { id: LibraryView; label: string; icon: ReactNode }[] = [
 
 export function ViewToggle({ view, onChange }: ViewToggleProps) {
   return (
-    <div className="flex w-[40vw] rounded-lg border border-libro-border bg-libro-bg p-0.5">
+    <div className="flex w-full max-w-[132px] rounded-lg border border-libro-border bg-libro-bg p-0.5">
       {views.map((v) => (
         <button
           key={v.id}
           type="button"
           onClick={() => onChange(v.id)}
-          className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition ${
+          className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition ${
             view === v.id
               ? 'bg-libro-surface text-libro-text shadow-sm'
               : 'text-libro-muted hover:text-libro-text'
