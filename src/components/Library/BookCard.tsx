@@ -1,5 +1,8 @@
+import { useEffect, useMemo, useState } from 'react'
 import type { Book } from '../../types'
 import { displaySizePx } from '../../lib/bookDimensions'
+import { getSpinePreset } from '../../lib/spinePresets'
+import { useLongPress } from '../../hooks/useLongPress'
 import jointSeamSrc from '../../assets/joint-seam.png'
 
 interface BookCardProps {
@@ -7,7 +10,7 @@ interface BookCardProps {
   scale: number
   coverSlotHeightPx?: number
   onClick: () => void
-  onContextMenu?: (e: React.MouseEvent) => void
+  onBookMenu?: (point: { x: number; y: number }) => void
 }
 
 export function BookCard({
@@ -15,17 +18,42 @@ export function BookCard({
   scale,
   coverSlotHeightPx,
   onClick,
-  onContextMenu,
+  onBookMenu,
 }: BookCardProps) {
   const { widthPx, heightPx } = displaySizePx(book, scale)
-  const coverSrc = URL.createObjectURL(book.coverBlob)
+  const [coverFailed, setCoverFailed] = useState(false)
+  const preset = getSpinePreset(book)
+
+  const coverSrc = useMemo(() => {
+    if (coverFailed || !book.coverBlob || book.coverBlob.size === 0) return null
+    if (book.coverSource === 'placeholder') return null
+    return URL.createObjectURL(book.coverBlob)
+  }, [book.coverBlob, book.coverBlob?.size, book.coverSource, book.id, coverFailed])
+
+  useEffect(() => {
+    setCoverFailed(false)
+  }, [book.id, book.coverBlob?.size])
+
+  useEffect(() => {
+    if (!coverSrc) return
+    return () => URL.revokeObjectURL(coverSrc)
+  }, [coverSrc])
+
+  const { longPressProps, contextMenuProps, guardClick } = useLongPress(
+    (point) => onBookMenu?.(point),
+    { disabled: !onBookMenu },
+  )
 
   return (
     <button
       type="button"
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      className="flex cursor-pointer flex-col items-center gap-2.5 border-0 bg-transparent p-0 transition-transform hover:scale-[1.02] active:scale-[0.97]"
+      onClick={(event) => {
+        guardClick(event)
+        if (!event.defaultPrevented) onClick()
+      }}
+      {...longPressProps}
+      {...contextMenuProps}
+      className="flex max-w-full cursor-pointer flex-col items-center gap-2.5 border-0 bg-transparent p-0 transition-transform hover:scale-[1.02] active:scale-[0.97]"
       style={{ width: widthPx }}
     >
       <div
@@ -39,30 +67,39 @@ export function BookCard({
           className="rounded-[1.5px] shadow-[1px_3px_6px_rgba(0,0,0,0.05),2px_8px_18px_rgba(0,0,0,0.09)]"
           style={{ width: widthPx, height: heightPx }}
         >
-        <div className="relative h-full w-full overflow-hidden rounded-[1.5px]">
-          <img
-            src={coverSrc}
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-cover"
-            onLoad={() => URL.revokeObjectURL(coverSrc)}
-          />
-          <img
-            src={jointSeamSrc}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-10 h-full select-none object-fill"
-            style={{ left: 4, width: 9 }}
-          />
-        </div>
+          <div className="relative h-full w-full overflow-hidden rounded-[1.5px]">
+            {coverSrc ? (
+              <img
+                src={coverSrc}
+                alt=""
+                aria-hidden="true"
+                className="h-full w-full object-cover"
+                onError={() => setCoverFailed(true)}
+                draggable={false}
+              />
+            ) : (
+              <div
+                className="h-full w-full"
+                style={{ backgroundColor: preset.bg, color: preset.fg }}
+                aria-label={book.title}
+              />
+            )}
+            <img
+              src={jointSeamSrc}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute top-0 z-10 h-full select-none object-fill"
+              style={{ left: 4, width: 9 }}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="w-full min-w-0 text-center">
-        <p className="line-clamp-3 text-[9px] font-normal leading-tight text-neutral-400">
+      <div className="w-full min-w-0 px-0.5 text-center">
+        <p className="line-clamp-3 text-[11px] font-normal leading-snug text-libro-muted">
           {book.title}
         </p>
-        <p className="mt-px line-clamp-2 text-[8px] leading-tight text-neutral-400/70">
+        <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-libro-muted/80">
           {book.author}
         </p>
       </div>

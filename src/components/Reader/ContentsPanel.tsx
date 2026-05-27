@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import type { Bookmark, ReaderTheme, TocEntry } from '../../types'
+import type { Bookmark, TocEntry } from '../../types'
 
 interface ContentsPanelProps {
   open: boolean
-  theme: ReaderTheme
+  bookTitle?: string
   items: TocEntry[]
   bookmarks: Bookmark[]
   onClose: () => void
@@ -28,10 +28,12 @@ function TocList({
           <button
             type="button"
             onClick={() => onSelect(item.href)}
-            className="reader-list-row w-full text-left text-[17px] leading-snug"
-            style={{ paddingLeft: `${16 + depth * 14}px`, paddingRight: '16px' }}
+            className={`flex w-full items-center border-b border-libro-border py-3.5 text-left transition hover:bg-black/[0.03] active:bg-black/[0.05] ${
+              depth === 0 ? 'text-[15px] font-medium text-libro-text' : 'text-[14px] text-libro-text/90'
+            }`}
+            style={{ paddingLeft: `${16 + depth * 16}px`, paddingRight: '16px' }}
           >
-            {item.label}
+            <span className="line-clamp-2 leading-snug">{item.label}</span>
           </button>
           {item.subitems && item.subitems.length > 0 && (
             <TocList items={item.subitems} depth={depth + 1} onSelect={onSelect} />
@@ -44,7 +46,7 @@ function TocList({
 
 export function ContentsPanel({
   open,
-  theme,
+  bookTitle,
   items,
   bookmarks,
   onClose,
@@ -57,90 +59,104 @@ export function ContentsPanel({
   if (!open) return null
 
   return (
-    <div className="absolute inset-0 z-[60] flex" data-reader-theme={theme}>
-      <div className="reader-panel flex h-full w-full max-w-[320px] flex-col shadow-2xl sm:max-w-sm">
-        <header className="shrink-0 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="reader-chrome-title text-[20px] font-bold tracking-[-0.02em]">
+    <div className="absolute inset-0 z-[60] flex flex-col bg-libro-bg">
+      <header className="relative shrink-0 border-b border-libro-border bg-libro-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
+        <div className="relative mb-3 flex min-h-[36px] items-center justify-center">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-0 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-[15px] font-medium text-libro-muted transition hover:bg-black/5 hover:text-libro-text"
+          >
+            Done
+          </button>
+          <div className="max-w-[70%] text-center">
+            <h2 className="truncate text-lg font-semibold text-libro-text">
               {tab === 'contents' ? 'Contents' : 'Bookmarks'}
             </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="reader-chrome-link text-[17px] font-normal"
-            >
-              Done
-            </button>
+            {bookTitle && (
+              <p className="truncate text-xs text-libro-muted">{bookTitle}</p>
+            )}
           </div>
-          <div className="reader-segmented flex p-0.5">
-            <button
-              type="button"
-              onClick={() => setTab('contents')}
-              className={`flex-1 rounded-[7px] py-1.5 text-[13px] font-medium ${
-                tab === 'contents' ? 'reader-segmented-active shadow-sm' : 'reader-chrome-subtitle'
-              }`}
-            >
-              Contents
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('bookmarks')}
-              className={`flex-1 rounded-[7px] py-1.5 text-[13px] font-medium ${
-                tab === 'bookmarks' ? 'reader-segmented-active shadow-sm' : 'reader-chrome-subtitle'
-              }`}
-            >
-              Bookmarks
-            </button>
-          </div>
-        </header>
+        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === 'contents' ? (
-            items.length === 0 ? (
-              <p className="reader-chrome-subtitle px-4 py-6 text-[15px]">No table of contents found.</p>
-            ) : (
-              <TocList items={items} depth={0} onSelect={onSelectHref} />
-            )
-          ) : bookmarks.length === 0 ? (
-            <p className="reader-chrome-subtitle px-4 py-6 text-[15px]">
-              Bookmarks you add while reading will appear here.
+        <div className="flex rounded-lg bg-libro-bg p-1">
+          <button
+            type="button"
+            onClick={() => setTab('contents')}
+            className={`flex-1 rounded-md py-2 text-[13px] font-medium transition ${
+              tab === 'contents'
+                ? 'bg-libro-surface text-libro-text shadow-sm'
+                : 'text-libro-muted hover:text-libro-text'
+            }`}
+          >
+            Contents
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('bookmarks')}
+            className={`flex-1 rounded-md py-2 text-[13px] font-medium transition ${
+              tab === 'bookmarks'
+                ? 'bg-libro-surface text-libro-text shadow-sm'
+                : 'text-libro-muted hover:text-libro-text'
+            }`}
+          >
+            Bookmarks
+            {bookmarks.length > 0 && (
+              <span className="ml-1 tabular-nums text-libro-muted">({bookmarks.length})</span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'contents' ? (
+          items.length === 0 ? (
+            <p className="px-6 py-12 text-center text-sm text-libro-muted">
+              No table of contents found for this book.
             </p>
           ) : (
-            <ul className="list-none p-0">
-              {[...bookmarks].reverse().map((bookmark) => (
-                <li key={bookmark.id} className="reader-list-row flex items-center">
+            <div className="bg-libro-surface">
+              <TocList items={items} depth={0} onSelect={onSelectHref} />
+            </div>
+          )
+        ) : bookmarks.length === 0 ? (
+          <p className="px-6 py-12 text-center text-sm text-libro-muted">
+            Bookmarks you add while reading will appear here.
+          </p>
+        ) : (
+          <ul className="list-none bg-libro-surface p-0">
+            {[...bookmarks].reverse().map((bookmark) => (
+              <li
+                key={bookmark.id}
+                className="flex items-stretch border-b border-libro-border last:border-b-0"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectCfi(bookmark.cfi)}
+                  className="min-w-0 flex-1 px-4 py-3.5 text-left transition hover:bg-black/[0.03] active:bg-black/[0.05]"
+                >
+                  <p className="truncate text-[15px] font-medium leading-snug text-libro-text">
+                    {bookmark.label}
+                  </p>
+                  <p className="mt-0.5 text-xs tabular-nums text-libro-muted">
+                    {Math.round(bookmark.percentage)}% through book
+                  </p>
+                </button>
+                {bookmark.id !== undefined && (
                   <button
                     type="button"
-                    onClick={() => onSelectCfi(bookmark.cfi)}
-                    className="min-w-0 flex-1 px-4 py-3 text-left"
+                    onClick={() => onRemoveBookmark(bookmark.id!)}
+                    className="shrink-0 px-4 text-lg text-libro-muted transition hover:text-red-600"
+                    aria-label="Remove bookmark"
                   >
-                    <p className="reader-chrome-title truncate text-[17px] leading-snug">{bookmark.label}</p>
-                    <p className="reader-chrome-subtitle text-[13px]">
-                      {Math.round(bookmark.percentage)}%
-                    </p>
+                    ×
                   </button>
-                  {bookmark.id !== undefined && (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveBookmark(bookmark.id!)}
-                      className="reader-chrome-subtitle shrink-0 px-4 py-3 text-[17px] hover:text-red-500"
-                      aria-label="Remove bookmark"
-                    >
-                      ×
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      <button
-        type="button"
-        className="hidden flex-1 bg-black/20 sm:block"
-        aria-label="Close menu"
-        onClick={onClose}
-      />
     </div>
   )
 }

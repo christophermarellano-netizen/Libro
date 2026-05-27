@@ -1,4 +1,4 @@
-import { GalleryHorizontal, LayoutGrid, ShelvingUnit } from 'lucide-react'
+import { LayoutGrid, ShelvingUnit } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { LibraryView } from '../../types'
 
@@ -12,11 +12,6 @@ const views: { id: LibraryView; label: string; icon: ReactNode }[] = [
     id: 'grid',
     label: 'Grid',
     icon: <LayoutGrid aria-hidden="true" size={16} strokeWidth={1.75} />,
-  },
-  {
-    id: 'coverflow',
-    label: 'Flow',
-    icon: <GalleryHorizontal aria-hidden="true" size={16} strokeWidth={1.75} />,
   },
   {
     id: 'shelf',

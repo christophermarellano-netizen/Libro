@@ -2,19 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Book } from '../../types'
 import { libraryDisplayScale } from '../../lib/bookDimensions'
 import { scaledSpineWidth } from '../../lib/spinePresets'
+import {
+  CoverFlowCarousel,
+  type CoverFlowCarouselHandle,
+} from './CoverFlowCarousel'
 import { SpineView } from './SpineView'
 
 interface ShelfOverviewProps {
   books: Book[]
   onOpen: (book: Book) => void
+  onFocusedBookChange?: (book: Book | null) => void
+  onBookMenu?: (book: Book, point: { x: number; y: number }) => void
 }
 
-const SHELF_GAP = 4
 const MINI_GAP = 4
 const MINI_ROW_GAP = 20
 const SHELF_SIDE_PADDING = 20
 const MINI_VERTICAL_PADDING = 8
-const DETAIL_HEIGHT_RATIO = 0.8
 const MINI_TARGET_FALLBACK = 88
 const SHELF_HEIGHT_RATIO = 1.1
 const SHELF_LIP_OFFSET_PX = 8
@@ -120,14 +124,15 @@ function miniTargetHeightForViewport(
   return best
 }
 
-export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
+export function ShelfOverview({
+  books,
+  onOpen,
+  onFocusedBookChange,
+  onBookMenu,
+}: ShelfOverviewProps) {
   const miniRef = useRef<HTMLDivElement>(null)
-  const detailContainerRef = useRef<HTMLDivElement>(null)
-  const detailScrollRef = useRef<HTMLDivElement>(null)
+  const coverFlowRef = useRef<CoverFlowCarouselHandle>(null)
   const [miniViewport, setMiniViewport] = useState({ width: 0, height: 0 })
-  const [detailViewport, setDetailViewport] = useState({ width: 0, height: 0 })
-  const dragSnapshot = useRef<{ x: number; scrollLeft: number } | null>(null)
-  const suppressClick = useRef(false)
   const [scrollIndicator, setScrollIndicator] = useState<{
     left: number
     top: number
@@ -135,34 +140,9 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
   } | null>(null)
   const activeIndicatorBookId = useRef<number | null>(null)
 
-  const updateScrollIndicator = useCallback(() => {
-    const scrollEl = detailScrollRef.current
+  const updateScrollIndicator = useCallback((activeId: number | null) => {
     const miniEl = miniRef.current
-    if (!scrollEl || !miniEl) return
-
-    const detailSpines = scrollEl.querySelectorAll('[data-shelf-spine]')
-    if (detailSpines.length === 0) {
-      activeIndicatorBookId.current = null
-      setScrollIndicator(null)
-      return
-    }
-
-    const scrollRect = scrollEl.getBoundingClientRect()
-    const viewportCenterX = scrollRect.left + scrollRect.width / 2
-
-    let activeId: number | null = null
-    let minDist = Infinity
-    detailSpines.forEach((el) => {
-      const rect = el.getBoundingClientRect()
-      const centerX = rect.left + rect.width / 2
-      const dist = Math.abs(centerX - viewportCenterX)
-      if (dist < minDist) {
-        minDist = dist
-        activeId = Number(el.getAttribute('data-shelf-spine'))
-      }
-    })
-
-    if (activeId == null || Number.isNaN(activeId)) {
+    if (!miniEl || activeId == null) {
       activeIndicatorBookId.current = null
       setScrollIndicator(null)
       return
@@ -216,75 +196,18 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
     })
   }, [])
 
-  const scrollToDetailBook = useCallback(
-    (bookId: number) => {
-      const scrollEl = detailScrollRef.current
-      if (!scrollEl) return
-
-      const spine = scrollEl.querySelector(`[data-shelf-spine="${bookId}"]`)
-      if (!spine) return
-
-      const scrollRect = scrollEl.getBoundingClientRect()
-      const spineRect = spine.getBoundingClientRect()
-      const spineCenterInScroll =
-        spineRect.left + spineRect.width / 2 - scrollRect.left + scrollEl.scrollLeft
-      const targetScrollLeft = spineCenterInScroll - scrollEl.clientWidth / 2
-      const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth
-
-      scrollEl.scrollTo({
-        left: Math.max(0, Math.min(targetScrollLeft, maxScrollLeft)),
-        behavior: 'smooth',
-      })
+  const handleFocusedBookChange = useCallback(
+    (book: Book | null) => {
+      updateScrollIndicator(book?.id ?? null)
+      onFocusedBookChange?.(book)
     },
-    [],
+    [onFocusedBookChange, updateScrollIndicator],
   )
 
-  const handleMiniSpineClick = useCallback(
-    (book: Book) => {
-      if (book.id == null) return
-      scrollToDetailBook(book.id)
-    },
-    [scrollToDetailBook],
-  )
-
-  const handleShelfPointerDown = useCallback((e: React.PointerEvent) => {
-    const el = detailScrollRef.current
-    if (!el || e.button !== 0) return
-    dragSnapshot.current = { x: e.clientX, scrollLeft: el.scrollLeft }
-    suppressClick.current = false
-    el.setPointerCapture(e.pointerId)
+  const handleMiniSpineClick = useCallback((book: Book) => {
+    if (book.id == null) return
+    coverFlowRef.current?.focusBookById(book.id)
   }, [])
-
-  const handleShelfPointerMove = useCallback((e: React.PointerEvent) => {
-    const el = detailScrollRef.current
-    const snap = dragSnapshot.current
-    if (!el || !snap) return
-    const dx = e.clientX - snap.x
-    if (Math.abs(dx) > 4) suppressClick.current = true
-    if (suppressClick.current) {
-      el.scrollLeft = snap.scrollLeft - dx
-      updateScrollIndicator()
-    }
-  }, [updateScrollIndicator])
-
-  const handleShelfPointerEnd = useCallback((e: React.PointerEvent) => {
-    dragSnapshot.current = null
-    const el = detailScrollRef.current
-    if (el?.hasPointerCapture(e.pointerId)) {
-      el.releasePointerCapture(e.pointerId)
-    }
-  }, [])
-
-  const handleSpineOpen = useCallback(
-    (book: Book) => {
-      if (suppressClick.current) {
-        suppressClick.current = false
-        return
-      }
-      onOpen(book)
-    },
-    [onOpen],
-  )
 
   const miniTargetHeight = useMemo(
     () =>
@@ -294,21 +217,9 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
     [books, miniViewport.height, miniViewport.width],
   )
 
-  const detailTargetHeight = useMemo(
-    () =>
-      detailViewport.height > 0
-        ? Math.max(48, Math.round(detailViewport.height * DETAIL_HEIGHT_RATIO))
-        : 180,
-    [detailViewport.height],
-  )
-
   const miniScale = useMemo(
     () => libraryDisplayScale(books, miniTargetHeight),
     [books, miniTargetHeight],
-  )
-  const detailScale = useMemo(
-    () => libraryDisplayScale(books, detailTargetHeight),
-    [books, detailTargetHeight],
   )
 
   const miniInnerWidth = Math.max(0, miniViewport.width - SHELF_SIDE_PADDING * 2)
@@ -320,61 +231,40 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
   )
 
   const miniShelfHeight = shelfBandHeightPx(miniTargetHeight)
-  const detailShelfHeight = shelfBandHeightPx(detailTargetHeight)
 
   useEffect(() => {
     const miniEl = miniRef.current
-    const detailEl = detailContainerRef.current
-    if (!miniEl || !detailEl) return
+    if (!miniEl) return
 
     const updateMini = () =>
       setMiniViewport({ width: miniEl.clientWidth, height: miniEl.clientHeight })
-    const updateDetail = () =>
-      setDetailViewport({ width: detailEl.clientWidth, height: detailEl.clientHeight })
 
     updateMini()
-    updateDetail()
-
     const miniObserver = new ResizeObserver(updateMini)
-    const detailObserver = new ResizeObserver(updateDetail)
     miniObserver.observe(miniEl)
-    detailObserver.observe(detailEl)
 
-    return () => {
-      miniObserver.disconnect()
-      detailObserver.disconnect()
-    }
+    return () => miniObserver.disconnect()
   }, [books.length])
 
   useEffect(() => {
-    const scrollEl = detailScrollRef.current
     const miniEl = miniRef.current
-    if (!scrollEl) return
+    if (!miniEl) return
 
-    const update = () => updateScrollIndicator()
-    update()
+    const update = () => {
+      if (activeIndicatorBookId.current != null) {
+        updateScrollIndicator(activeIndicatorBookId.current)
+      }
+    }
 
-    scrollEl.addEventListener('scroll', update, { passive: true })
     window.addEventListener('resize', update)
-
     const observer = new ResizeObserver(update)
-    observer.observe(scrollEl)
-    if (miniEl) observer.observe(miniEl)
+    observer.observe(miniEl)
 
     return () => {
-      scrollEl.removeEventListener('scroll', update)
       window.removeEventListener('resize', update)
       observer.disconnect()
     }
-  }, [
-    updateScrollIndicator,
-    books,
-    miniRows,
-    miniScale,
-    detailScale,
-    miniShelfHeight,
-    detailShelfHeight,
-  ])
+  }, [updateScrollIndicator, books, miniRows, miniScale, miniShelfHeight])
 
   if (books.length === 0) {
     return (
@@ -386,7 +276,6 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#F1F1F1]">
-      {/* Minimap */}
       <div
         ref={miniRef}
         className="relative flex min-h-0 flex-[3] flex-col overflow-hidden bg-[#F1F1F1]"
@@ -430,6 +319,11 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
                           book={book}
                           heightPx={Math.round(book.physicalHeightMm * miniScale)}
                           onClick={() => handleMiniSpineClick(book)}
+                          onBookMenu={
+                            onBookMenu
+                              ? (point) => onBookMenu(book, point)
+                              : undefined
+                          }
                         />
                       </div>
                     ))}
@@ -441,41 +335,17 @@ export function ShelfOverview({ books, onOpen }: ShelfOverviewProps) {
         </div>
       </div>
 
-      {/* Detail shelf */}
-      <div
-        ref={detailContainerRef}
-        className="flex min-h-0 flex-[2] flex-col justify-end overflow-visible bg-white"
-      >
-        <div
-          className="relative w-full shrink-0"
-          style={{ height: detailShelfHeight + SHELF_LIP_TOTAL_PX }}
-        >
-          <div
-            ref={detailScrollRef}
-            className="shelf-band shelf-band-white no-scrollbar absolute inset-x-0 top-0 flex cursor-grab items-end overflow-x-auto overflow-y-hidden touch-none active:cursor-grabbing"
-            style={{ height: detailShelfHeight }}
-            onPointerDown={handleShelfPointerDown}
-            onPointerMove={handleShelfPointerMove}
-            onPointerUp={handleShelfPointerEnd}
-            onPointerCancel={handleShelfPointerEnd}
-          >
-            <div
-              className="relative z-10 flex items-end px-1"
-              style={{ gap: SHELF_GAP, paddingInline: SHELF_SIDE_PADDING }}
-            >
-              {books.map((book) => (
-                <div key={book.id} data-shelf-spine={book.id} className="shrink-0">
-                  <SpineView
-                    book={book}
-                    heightPx={Math.round(book.physicalHeightMm * detailScale)}
-                    className="rounded-[1.5px]"
-                    onClick={() => handleSpineOpen(book)}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="flex min-h-0 flex-[2] flex-col overflow-hidden bg-white">
+        <CoverFlowCarousel
+          ref={coverFlowRef}
+          books={books}
+          onOpen={onOpen}
+          onFocusedBookChange={handleFocusedBookChange}
+          onBookMenu={onBookMenu}
+          contentPaddingTop={21}
+          contentPaddingBottom={24}
+          rowHeightScale={0.91}
+        />
       </div>
     </div>
   )

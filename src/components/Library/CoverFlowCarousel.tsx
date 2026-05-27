@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, useMotionValue, animate } from 'framer-motion'
 import type { Book } from '../../types'
 import { displaySizePx, libraryDisplayScale, LIBRARY_ROW_TARGET_HEIGHT } from '../../lib/bookDimensions'
@@ -11,12 +11,23 @@ interface CoverFlowCarouselProps {
   books: Book[]
   onOpen: (book: Book) => void
   onFocusedBookChange?: (book: Book | null) => void
+  onBookMenu?: (book: Book, point: { x: number; y: number }) => void
+  contentPaddingTop?: number
+  contentPaddingBottom?: number
+  /** Fraction of available height used for book scale (inset layout only). */
+  rowHeightScale?: number
+}
+
+export interface CoverFlowCarouselHandle {
+  focusBookById: (bookId: number) => void
 }
 
 const ITEM_GAP = 4
 const TURN_CLEARANCE = 28
 const TURN_DURATION_MS = 460
 const DRAG_THRESHOLD_PX = 12
+const LONG_PRESS_MS = 500
+const SHELF_LIP_HEIGHT_PX = 0.5
 
 const turnTransition = {
   duration: 0.68,
@@ -82,6 +93,7 @@ function CoverFlowBook({
   onOpen,
   onFocus,
   onCoverError,
+  onBookMenu,
 }: {
   book: Book
   slotWidth: number
@@ -95,6 +107,7 @@ function CoverFlowBook({
   onOpen: () => void
   onFocus: () => void
   onCoverError: () => void
+  onBookMenu?: (point: { x: number; y: number }) => void
 }) {
   const sideWidth = Math.max(14, Math.min(spineWidth, 34))
   const coverInset = TURN_CLEARANCE
@@ -137,10 +150,18 @@ function CoverFlowBook({
     else onFocus()
   }
 
+  const handleContextMenu = (event: React.MouseEvent) => {
+    if (!onBookMenu) return
+    event.preventDefault()
+    event.stopPropagation()
+    onBookMenu({ x: event.clientX, y: event.clientY })
+  }
+
   return (
     <motion.button
       type="button"
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       className="absolute bottom-0 block cursor-pointer border-0 bg-transparent p-0"
       style={{
         width: slotWidth,
@@ -238,12 +259,21 @@ function CoverFlowBook({
   )
 }
 
-export function CoverFlowCarousel({
-  books,
-  onOpen,
-  onFocusedBookChange,
-}: CoverFlowCarouselProps) {
+export const CoverFlowCarousel = forwardRef<CoverFlowCarouselHandle, CoverFlowCarouselProps>(
+  function CoverFlowCarousel(
+    {
+      books,
+      onOpen,
+      onFocusedBookChange,
+      onBookMenu,
+      contentPaddingTop,
+      contentPaddingBottom,
+      rowHeightScale = 1,
+    },
+    ref,
+  ) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [containerHeight, setContainerHeight] = useState(0)
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [closingIndex, setClosingIndex] = useState<number | null>(null)
   const [failedCovers, setFailedCovers] = useState<Set<string>>(() => new Set())
@@ -254,6 +284,8 @@ export function CoverFlowCarousel({
   const suppressClick = useRef(false)
   const suppressReset = useRef<number | null>(null)
   const closeTimer = useRef<number | null>(null)
+  const longPressTimer = useRef<number | null>(null)
+  const longPressFired = useRef(false)
   const hasInitializedScroll = useRef(false)
 
   const activeCoverIndex = focusedIndex ?? closingIndex
@@ -268,9 +300,33 @@ export function CoverFlowCarousel({
     return () => onFocusedBookChange?.(null)
   }, [onFocusedBookChange])
 
+  const insetTop = contentPaddingTop ?? 0
+  const insetBottom = contentPaddingBottom ?? 0
+  const useInsetLayout = contentPaddingTop != null || contentPaddingBottom != null
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => setContainerHeight(el.clientHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const rowTargetHeight = useMemo(() => {
+    if (!useInsetLayout) return LIBRARY_ROW_TARGET_HEIGHT
+    const bottomReserve = insetBottom + SHELF_LIP_HEIGHT_PX
+    const available = containerHeight - insetTop - bottomReserve
+    if (available <= 0) return 180
+    const heightBudget = available * rowHeightScale
+    return Math.max(48, Math.min(LIBRARY_ROW_TARGET_HEIGHT, heightBudget))
+  }, [useInsetLayout, containerHeight, insetTop, insetBottom, rowHeightScale])
+
   const rowScale = useMemo(
-    () => libraryDisplayScale(books, LIBRARY_ROW_TARGET_HEIGHT),
-    [books],
+    () => libraryDisplayScale(books, rowTargetHeight),
+    [books, rowTargetHeight],
   )
   const bookSize = useCallback(
     (book: Book) => displaySizePx(book, rowScale),
@@ -385,6 +441,7 @@ export function CoverFlowCarousel({
     return () => {
       if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
       if (suppressReset.current != null) window.clearTimeout(suppressReset.current)
+      if (longPressTimer.current != null) window.clearTimeout(longPressTimer.current)
     }
   }, [])
 
@@ -438,9 +495,18 @@ export function CoverFlowCarousel({
     [books.length, closingIndex, focusedIndex, requestFocus],
   )
 
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimer.current != null) {
+      window.clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }, [])
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
+      clearLongPressTimer()
+      longPressFired.current = false
       const downIndex = Number(
         (e.target instanceof HTMLElement
           ? e.target.closest('[data-coverflow-index]')?.getAttribute('data-coverflow-index')
@@ -466,8 +532,22 @@ export function CoverFlowCarousel({
       dragSnapshot.current = { x: e.clientX, scrollX: scrollX.get() }
       suppressClick.current = false
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+
+      if (onBookMenu && pointerDownIndex.current != null) {
+        const index = pointerDownIndex.current
+        const point = { x: e.clientX, y: e.clientY }
+        longPressTimer.current = window.setTimeout(() => {
+          longPressTimer.current = null
+          longPressFired.current = true
+          suppressClick.current = true
+          dragSnapshot.current = null
+          const book = books[index]
+          if (book) onBookMenu(book, point)
+          if (navigator.vibrate) navigator.vibrate(10)
+        }, LONG_PRESS_MS)
+      }
     },
-    [closingIndex, focusedIndex, scrollX],
+    [books, clearLongPressTimer, closingIndex, focusedIndex, onBookMenu, scrollX],
   )
 
   const handlePointerMove = useCallback(
@@ -475,6 +555,9 @@ export function CoverFlowCarousel({
       const snap = dragSnapshot.current
       if (!snap) return
       const dx = e.clientX - snap.x
+      if (Math.abs(dx) > DRAG_THRESHOLD_PX) {
+        clearLongPressTimer()
+      }
       if (Math.abs(dx) > DRAG_THRESHOLD_PX && !suppressClick.current) {
         // #region agent log
         debugCoverFlow('H2', 'CoverFlowCarousel.tsx:429', 'pointer move entered drag suppression', {
@@ -490,13 +573,27 @@ export function CoverFlowCarousel({
         scrollX.set(snap.scrollX + dx)
       }
     },
-    [scrollX],
+    [clearLongPressTimer, scrollX],
   )
 
   const handlePointerEnd = useCallback(
     (e: React.PointerEvent) => {
+      clearLongPressTimer()
       const snap = dragSnapshot.current
-      if (!snap) return
+      if (!snap) {
+        if (longPressFired.current) {
+          longPressFired.current = false
+          suppressReset.current = window.setTimeout(() => {
+            suppressClick.current = false
+            suppressReset.current = null
+          }, 0)
+        }
+        pointerDownIndex.current = null
+        if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+          ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+        }
+        return
+      }
       dragSnapshot.current = null
       // #region agent log
       debugCoverFlow('H5', 'CoverFlowCarousel.tsx:459', 'container pointer end', {
@@ -548,7 +645,7 @@ export function CoverFlowCarousel({
         ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
       }
     },
-    [books, closingIndex, findNearestIndex, focusedIndex, onOpen, requestFocus, scrollX],
+    [books, clearLongPressTimer, closingIndex, findNearestIndex, focusedIndex, onOpen, requestFocus, scrollX],
   )
 
   const handleSpineFocus = useCallback(
@@ -575,6 +672,31 @@ export function CoverFlowCarousel({
     [closingIndex, focusedIndex, requestFocus],
   )
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusBookById(bookId: number) {
+        const index = books.findIndex((book) => book.id === bookId)
+        if (index >= 0) requestFocus(index)
+      },
+    }),
+    [books, requestFocus],
+  )
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      if (!onBookMenu) return
+      const indexed = (event.target as HTMLElement).closest('[data-coverflow-index]')
+      if (!indexed) return
+      event.preventDefault()
+      event.stopPropagation()
+      const index = Number(indexed.getAttribute('data-coverflow-index'))
+      const book = books[index]
+      if (book) onBookMenu(book, { x: event.clientX, y: event.clientY })
+    },
+    [books, onBookMenu],
+  )
+
   if (books.length === 0) {
     return (
       <div className="flex h-full min-h-0 flex-1 items-center justify-center text-libro-muted">
@@ -588,6 +710,7 @@ export function CoverFlowCarousel({
       <div
         ref={containerRef}
         className="relative min-h-0 flex-1 cursor-grab overflow-hidden touch-none active:cursor-grabbing"
+        style={useInsetLayout ? { paddingTop: insetTop } : undefined}
         onClickCapture={(e) => {
           // #region agent log
           debugCoverFlow('H6', 'CoverFlowCarousel.tsx:544', 'container click capture', {
@@ -603,13 +726,34 @@ export function CoverFlowCarousel({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
+        onContextMenu={handleContextMenu}
       >
+        {useInsetLayout && (
+          <div
+            aria-hidden="true"
+            className="shelf-lip-line pointer-events-none absolute left-1/2 z-10 -translate-x-1/2"
+            style={{ bottom: insetBottom }}
+          />
+        )}
         <motion.div
-          className="absolute left-0 top-1/2"
-          style={{ x: scrollX }}
+          className={
+            useInsetLayout
+              ? 'absolute left-0'
+              : 'absolute left-0 top-1/2'
+          }
+          style={{
+            x: scrollX,
+            ...(useInsetLayout
+              ? { bottom: insetBottom + SHELF_LIP_HEIGHT_PX }
+              : {}),
+          }}
         >
           <div
-            className="flex -translate-y-1/2 items-end"
+            className={
+              useInsetLayout
+                ? 'flex items-end'
+                : 'flex -translate-y-1/2 items-end'
+            }
             style={{ gap: ITEM_GAP }}
           >
             {books.map((book, i) => {
@@ -655,6 +799,9 @@ export function CoverFlowCarousel({
                     mode={mode}
                     onOpen={() => onOpen(book)}
                     onFocus={() => handleSpineFocus(i)}
+                    onBookMenu={
+                      onBookMenu ? (point) => onBookMenu(book, point) : undefined
+                    }
                     onCoverError={() => {
                       setFailedCovers((prev) => {
                         const next = new Set(prev)
@@ -671,4 +818,5 @@ export function CoverFlowCarousel({
       </div>
     </div>
   )
-}
+},
+)

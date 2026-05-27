@@ -24,6 +24,8 @@ export type ReaderTheme = 'light' | 'dark' | 'sepia'
 
 export interface Book {
   id?: number
+  cloudId?: string
+  syncUpdatedAt?: number
   title: string
   author: string
   epubBlob: Blob
@@ -52,6 +54,7 @@ export interface ReadingProgress {
 
 export interface Bookmark {
   id?: number
+  cloudId?: string
   bookId: number
   cfi: string
   label: string
@@ -74,6 +77,7 @@ export interface SearchHit {
 
 export interface VocabEntry {
   id?: number
+  cloudId?: string
   bookId: number
   word: string
   translation: string
@@ -83,6 +87,7 @@ export interface VocabEntry {
 
 export interface AppSettings {
   id: number
+  syncUpdatedAt?: number
   deeplApiKey?: string
   amazonAccessKey?: string
   amazonSecretKey?: string
@@ -93,6 +98,9 @@ export interface AppSettings {
   readerTheme: ReaderTheme
   readerLineSpacing: number
   readerMargin: number
+  readerTranslationEnabled: boolean
+  readingTimeDate?: string
+  readingTimeTodayMs?: number
   librarySort: LibrarySort
   libraryView: LibraryView
 }
@@ -134,10 +142,12 @@ export interface GoogleBooksVolume {
 export const DEFAULT_SETTINGS: AppSettings = {
   id: 1,
   readerFontSize: 100,
-  readerFontFamily: 'Georgia, serif',
+  readerFontFamily: 'original',
   readerTheme: 'light',
   readerLineSpacing: 1.5,
   readerMargin: 16,
+  readerTranslationEnabled: true,
+  readingTimeTodayMs: 0,
   librarySort: 'recent',
   libraryView: 'grid',
 }

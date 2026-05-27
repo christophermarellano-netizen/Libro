@@ -20,17 +20,22 @@ export function useBookmarks(bookId: number | undefined) {
       .first()
     if (existing?.id) return existing.id
 
-    return db.bookmarks.add({
+    const id = await db.bookmarks.add({
       bookId,
       cfi,
       label,
       percentage,
       createdAt: Date.now(),
     })
+    const { scheduleBookmarksSync } = await import('../lib/sync')
+    scheduleBookmarksSync()
+    return id
   }
 
   const removeBookmark = async (id: number) => {
     await db.bookmarks.delete(id)
+    const { scheduleBookmarksSync } = await import('../lib/sync')
+    scheduleBookmarksSync()
   }
 
   const isBookmarked = (cfi: string) =>

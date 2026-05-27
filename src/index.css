@@ -208,6 +208,27 @@ body {
   background: var(--reader-tint);
 }
 
+.libro-slider {
+  accent-color: var(--color-libro-accent);
+}
+
+.libro-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--color-libro-border);
+}
+
+.libro-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -11px;
+  border-radius: 999px;
+  background: var(--color-libro-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-libro-border);
+}
+
 .reader-sheet {
   background: var(--reader-sheet-bg);
   color: var(--reader-chrome-text);
@@ -359,6 +380,12 @@ body {
   transform: translateX(-50%);
   background: #c8c8c8;
   pointer-events: none;
+}
+
+.shelf-lip-line {
+  width: 100vw;
+  height: 0.5px;
+  background: #c8c8c8;
 }
 
 .shelf-scroll-indicator {

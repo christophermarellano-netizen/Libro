@@ -90,22 +90,48 @@ export function dimensionsFromPageCount(pageCount: number): {
 /** Shared tallest-book target height for library row views (grid, coverflow). */
 export const LIBRARY_ROW_TARGET_HEIGHT = 300
 
+const DEFAULT_HEIGHT_MM = FORMAT_PRESETS.paperback.h
+const DEFAULT_WIDTH_MM = FORMAT_PRESETS.paperback.w
+
+function validDimension(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+export function bookHeightMm(book: { physicalHeightMm?: number }): number {
+  return validDimension(book.physicalHeightMm) ? book.physicalHeightMm : DEFAULT_HEIGHT_MM
+}
+
+export function bookWidthMm(book: { physicalWidthMm?: number }): number {
+  return validDimension(book.physicalWidthMm) ? book.physicalWidthMm : DEFAULT_WIDTH_MM
+}
+
+/** Spine depth on shelf views — from stored thickness or page count. */
+export function spineThicknessMm(book: {
+  physicalThicknessMm?: number
+  pageCount?: number
+}): number {
+  if (validDimension(book.physicalThicknessMm)) return book.physicalThicknessMm
+  if (book.pageCount) return thicknessFromPageCount(book.pageCount)
+  return 20
+}
+
 /** Scale factor so the tallest book renders at `targetTallestPx`. */
 export function libraryDisplayScale(
-  books: Array<{ physicalHeightMm: number }>,
+  books: Array<{ physicalHeightMm?: number }>,
   targetTallestPx = LIBRARY_ROW_TARGET_HEIGHT,
 ): number {
   if (books.length === 0) return 1
-  const maxHeightMm = Math.max(...books.map((b) => b.physicalHeightMm), 1)
+  const maxHeightMm = Math.max(...books.map(bookHeightMm), 1)
   return targetTallestPx / maxHeightMm
 }
 
 export function displaySizePx(
-  book: { physicalHeightMm: number; physicalWidthMm: number },
+  book: { physicalHeightMm?: number; physicalWidthMm?: number },
   scale: number,
 ): { widthPx: number; heightPx: number } {
+  const safeScale = validDimension(scale) ? scale : 1
   return {
-    heightPx: Math.round(book.physicalHeightMm * scale),
-    widthPx: Math.round(book.physicalWidthMm * scale),
+    heightPx: Math.max(24, Math.round(bookHeightMm(book) * safeScale)),
+    widthPx: Math.max(16, Math.round(bookWidthMm(book) * safeScale)),
   }
 }

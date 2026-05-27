@@ -1,100 +1,44 @@
 import { Link } from 'react-router-dom'
-import type { ReaderTheme } from '../../types'
-import {
-  BookmarkIcon,
-  ChevronLeftIcon,
-  ListBulletIcon,
-  SearchIcon,
-  TextFormatIcon,
-} from './ReaderIcons'
+import { ChevronLeftIcon } from './ReaderIcons'
 
 interface ReaderTopBarProps {
   visible: boolean
-  theme: ReaderTheme
   title: string
+  author?: string
   chapterLabel?: string
-  bookmarked: boolean
-  onSearch: () => void
-  onContents: () => void
-  onBookmark: () => void
-  onSettings: () => void
 }
 
 export function ReaderTopBar({
   visible,
-  theme,
   title,
+  author,
   chapterLabel,
-  bookmarked,
-  onSearch,
-  onContents,
-  onBookmark,
-  onSettings,
 }: ReaderTopBarProps) {
+  const subtitle = chapterLabel ?? author
+
   return (
     <header
-      className={`reader-chrome-top pointer-events-auto absolute inset-x-0 top-0 z-50 pt-[env(safe-area-inset-top)] transition-transform duration-300 ease-out ${
+      className={`pointer-events-auto absolute inset-x-0 top-0 z-50 border-b border-libro-border bg-libro-surface transition-transform duration-300 ease-out ${
         visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
       }`}
-      data-reader-theme={theme}
     >
-      <div className="flex h-11 items-stretch px-1 sm:px-2">
+      <div className="relative px-4 pb-4 pt-[max(16px,calc(env(safe-area-inset-top)+12px))] text-center">
         <Link
           to="/"
-          className="reader-chrome-link flex min-w-[44px] items-center gap-0.5 pl-1 pr-2"
+          className="absolute left-5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-full py-1 pl-0.5 pr-2 text-libro-muted transition hover:bg-black/5 hover:text-libro-text focus-visible:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10"
           aria-label="Library"
         >
-          <ChevronLeftIcon className="h-[22px] w-[22px]" strokeWidth={2.25} />
-          <span className="text-[17px] leading-none">Library</span>
+          <ChevronLeftIcon className="h-4 w-4" strokeWidth={1.75} />
+          <span className="text-sm font-medium leading-none">Library</span>
         </Link>
 
-        <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-2">
-          <p className="reader-chrome-title w-full truncate text-center text-[15px] font-semibold leading-tight tracking-[-0.01em]">
-            {title}
-          </p>
-          {chapterLabel && (
-            <p className="reader-chrome-subtitle w-full truncate text-center text-[12px] leading-tight">
-              {chapterLabel}
-            </p>
+        <div className="px-14 sm:px-16">
+          <h2 className="truncate text-lg font-semibold text-libro-text">{title}</h2>
+          {subtitle && (
+            <p className="truncate text-sm text-libro-muted">{subtitle}</p>
           )}
-        </div>
-
-        <div className="flex items-center">
-          <ChromeIconButton label="Search" onClick={onSearch}>
-            <SearchIcon />
-          </ChromeIconButton>
-          <ChromeIconButton label="Contents" onClick={onContents}>
-            <ListBulletIcon />
-          </ChromeIconButton>
-          <ChromeIconButton label={bookmarked ? 'Remove bookmark' : 'Add bookmark'} onClick={onBookmark}>
-            <BookmarkIcon filled={bookmarked} className={bookmarked ? 'text-[var(--reader-tint)]' : undefined} />
-          </ChromeIconButton>
-          <ChromeIconButton label="Appearance" onClick={onSettings}>
-            <TextFormatIcon />
-          </ChromeIconButton>
         </div>
       </div>
     </header>
-  )
-}
-
-function ChromeIconButton({
-  children,
-  label,
-  onClick,
-}: {
-  children: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="reader-chrome-icon-btn flex h-11 w-11 items-center justify-center"
-    >
-      {children}
-    </button>
   )
 }

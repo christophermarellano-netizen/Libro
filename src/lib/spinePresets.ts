@@ -1,4 +1,5 @@
 import type { Book } from '../types'
+import { bookHeightMm, spineThicknessMm } from './bookDimensions'
 
 export interface SpinePreset {
   font: string
@@ -71,9 +72,10 @@ export function titleFontSize(title: string): number {
 }
 
 export function scaledSpineWidth(book: Book, heightPx: number): number {
-  const baseHeight = defaultSpineHeight(book)
-  const baseWidth = defaultSpineWidth(book)
-  return Math.round(baseWidth * (heightPx / baseHeight))
+  const heightMm = bookHeightMm(book)
+  const thicknessMm = spineThicknessMm(book)
+  const widthPx = Math.round(thicknessMm * (heightPx / heightMm))
+  return Math.max(6, Math.min(56, widthPx))
 }
 
 export function spineDisplayScale(

@@ -37,6 +37,21 @@ Tap **+ Import** and select `.epub` files. Libro will:
 - epub.js, Dexie.js, Framer Motion
 - DeepL API, Google Books API
 
+## Cloud sync (optional)
+
+Libro can sync your library, reading progress, bookmarks, vocab, and settings across devices via [Supabase](https://supabase.com) (free tier works for personal use).
+
+1. Create a Supabase project and run the migration in [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql) (SQL Editor or CLI).
+2. Copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3. Deploy the DeepL proxy Edge Function:
+   ```bash
+   supabase functions deploy deepl-translate
+   ```
+4. In Supabase Auth settings, add your deploy URL (e.g. `https://libro.example.com`) as a redirect URL.
+5. Sign in via **Settings → Cloud Sync** on each device.
+
+Without Supabase, books stay in local IndexedDB. Use **Settings → Backup & Restore** to move your library manually.
+
 ## Build
 
 ```bash

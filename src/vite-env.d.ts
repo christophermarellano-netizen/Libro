@@ -1,5 +1,14 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL: string
+  readonly VITE_SUPABASE_ANON_KEY: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
 declare module 'amazon-paapi' {
   const amazonPaapi: {
     SearchItems: (
@@ -28,7 +37,9 @@ declare module 'epubjs' {
       register(name: string, styles: Record<string, Record<string, string>>): void
       select(name: string): void
       fontSize(size: string): void
-      override(property: string, value: string): void
+      font(family: string): void
+      override(property: string, value: string, priority?: boolean): void
+      removeOverride(property: string): void
     }
     getContents(): Array<{ document: Document }>
   }

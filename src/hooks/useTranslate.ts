@@ -35,6 +35,8 @@ export function useTranslate() {
         context,
         addedAt: Date.now(),
       })
+      const { scheduleVocabSync } = await import('../lib/sync')
+      scheduleVocabSync()
     },
     [],
   )

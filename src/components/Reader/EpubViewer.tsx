@@ -8,9 +8,24 @@ export interface WordTapEvent {
   y: number
 }
 
+interface EpubContents {
+  document: Document
+}
+
+type EpubRendition = Rendition & {
+  hooks: {
+    content: {
+      register: (fn: (contents: EpubContents) => void) => void
+      deregister: (fn: (contents: EpubContents) => void) => void
+    }
+  }
+  getContents: () => EpubContents[]
+}
+
 interface EpubViewerProps {
   containerRef: React.RefObject<HTMLDivElement | null>
   ready: boolean
+  translationEnabled: boolean
   onWordTap: (event: WordTapEvent) => void
   onBackgroundTap?: () => void
   getRendition: () => Rendition | null
@@ -94,81 +109,117 @@ function getIframe(doc: Document): HTMLIFrameElement | null {
   return doc.defaultView?.frameElement as HTMLIFrameElement | null
 }
 
+function eventCoords(event: Event): { x: number; y: number } | null {
+  if (event.type.startsWith('touch')) {
+    const touch = (event as TouchEvent).changedTouches?.[0] ?? (event as TouchEvent).touches?.[0]
+    if (touch) return { x: touch.clientX, y: touch.clientY }
+  }
+
+  const mouse = event as MouseEvent
+  if (typeof mouse.clientX === 'number' && typeof mouse.clientY === 'number') {
+    return { x: mouse.clientX, y: mouse.clientY }
+  }
+
+  return null
+}
+
 export function EpubViewer({
   containerRef,
   ready,
+  translationEnabled,
   onWordTap,
   onBackgroundTap,
   getRendition,
 }: EpubViewerProps) {
   const onWordTapRef = useRef(onWordTap)
   const onBackgroundTapRef = useRef(onBackgroundTap)
+  const getRenditionRef = useRef(getRendition)
+  const translationEnabledRef = useRef(translationEnabled)
   onWordTapRef.current = onWordTap
   onBackgroundTapRef.current = onBackgroundTap
+  getRenditionRef.current = getRendition
+  translationEnabledRef.current = translationEnabled
 
   useEffect(() => {
     if (!ready) return
-    const rendition = getRendition()
+    const rendition = getRenditionRef.current() as EpubRendition | null
     if (!rendition) return
 
-    const attachedDocs = new WeakSet<Document>()
-    const handlers = new Map<Document, (e: MouseEvent) => void>()
+    const attachedDocs = new Set<Document>()
+    const docCleanup = new Map<Document, () => void>()
+    let suppressClickUntil = 0
 
-    const handleDocClick = (doc: Document) => {
-      let handler = handlers.get(doc)
-      if (!handler) {
-        handler = (e: MouseEvent) => {
-          const word = getWordAtPoint(doc, e.clientX, e.clientY)
-          if (word.length < 2) {
-            onBackgroundTapRef.current?.()
-            return
-          }
+    const handlePointer = (doc: Document, event: Event) => {
+      const coords = eventCoords(event)
+      if (!coords) return
 
-          e.preventDefault()
-          e.stopPropagation()
-
-          const iframe = getIframe(doc)
-          const iframeRect = iframe?.getBoundingClientRect()
-          const pageX = iframeRect ? iframeRect.left + e.clientX : e.clientX
-          const pageY = iframeRect ? iframeRect.top + e.clientY : e.clientY
-
-          onWordTapRef.current({
-            word,
-            sentence: getSentence(doc, e.clientX, e.clientY),
-            x: pageX,
-            y: pageY,
-          })
-        }
-        handlers.set(doc, handler)
+      const word = getWordAtPoint(doc, coords.x, coords.y)
+      if (word.length < 2 || !translationEnabledRef.current) {
+        onBackgroundTapRef.current?.()
+        return
       }
-      return handler
-    }
 
-    const attachToDoc = (doc: Document) => {
-      if (attachedDocs.has(doc)) return
-      attachedDocs.add(doc)
-      doc.addEventListener('click', handleDocClick(doc), true)
-    }
-
-    const attachAll = () => {
-      try {
-        rendition.getContents().forEach((contents) => {
-          if (contents?.document) attachToDoc(contents.document)
-        })
-      } catch {
-        // getContents may fail before first render
+      if (event.type === 'touchend') {
+        suppressClickUntil = Date.now() + 400
+      } else if (event.type === 'click' && Date.now() < suppressClickUntil) {
+        return
       }
-    }
 
-    rendition.on('rendered', attachAll)
-    attachAll()
+      event.preventDefault()
+      event.stopPropagation()
 
-    return () => {
-      handlers.forEach((handler, doc) => {
-        doc.removeEventListener('click', handler, true)
+      const iframe = getIframe(doc)
+      const iframeRect = iframe?.getBoundingClientRect()
+      const pageX = iframeRect ? iframeRect.left + coords.x : coords.x
+      const pageY = iframeRect ? iframeRect.top + coords.y : coords.y
+
+      onWordTapRef.current({
+        word,
+        sentence: getSentence(doc, coords.x, coords.y),
+        x: pageX,
+        y: pageY,
       })
     }
-  }, [ready, getRendition])
+
+    const attachDoc = (doc: Document) => {
+      if (attachedDocs.has(doc)) return
+      attachedDocs.add(doc)
+
+      const onClick = (event: Event) => handlePointer(doc, event)
+      const onTouchEnd = (event: Event) => handlePointer(doc, event)
+
+      doc.addEventListener('click', onClick, true)
+      doc.addEventListener('touchend', onTouchEnd, true)
+
+      docCleanup.set(doc, () => {
+        doc.removeEventListener('click', onClick, true)
+        doc.removeEventListener('touchend', onTouchEnd, true)
+      })
+    }
+
+    const contentHook = (contents: EpubContents) => {
+      if (contents?.document) attachDoc(contents.document)
+    }
+
+    rendition.hooks.content.register(contentHook)
+
+    try {
+      rendition.getContents().forEach((contents) => {
+        if (contents?.document) attachDoc(contents.document)
+      })
+    } catch {
+      // getContents may fail before the first section renders
+    }
+
+    return () => {
+      rendition.hooks.content.deregister(contentHook)
+      attachedDocs.forEach((doc) => {
+        docCleanup.get(doc)?.()
+      })
+      attachedDocs.clear()
+      docCleanup.clear()
+    }
+  }, [ready])
 
   return (
     <div className="reader-scroll h-full overflow-hidden">

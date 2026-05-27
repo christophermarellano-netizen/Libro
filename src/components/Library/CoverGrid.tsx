@@ -10,7 +10,7 @@ import { BookCard } from './BookCard'
 interface CoverGridProps {
   books: Book[]
   onOpen: (book: Book) => void
-  onDelete: (book: Book) => void
+  onBookMenu: (book: Book, point: { x: number; y: number }) => void
 }
 
 function gridScaleForColumn(
@@ -30,7 +30,7 @@ function gridScaleForColumn(
   return baseScale * (limit / maxWidthPx)
 }
 
-export function CoverGrid({ books, onOpen, onDelete }: CoverGridProps) {
+export function CoverGrid({ books, onOpen, onBookMenu }: CoverGridProps) {
   const gridRef = useRef<HTMLDivElement>(null)
   const [columnWidth, setColumnWidth] = useState(0)
   const [columnCount, setColumnCount] = useState(3)
@@ -62,7 +62,7 @@ export function CoverGrid({ books, onOpen, onDelete }: CoverGridProps) {
     const ro = new ResizeObserver(measure)
     ro.observe(grid)
     return () => ro.disconnect()
-  }, [books.length])
+  }, [books])
 
   const scale = useMemo(
     () => gridScaleForColumn(books, columnWidth),
@@ -95,19 +95,16 @@ export function CoverGrid({ books, onOpen, onDelete }: CoverGridProps) {
     >
       {books.map((book, index) => (
         <div
-          key={book.id}
+          key={book.id ?? `${book.title}-${book.author}-${index}`}
           data-grid-cell
-          className="flex min-w-0 flex-col items-center"
+          className="flex w-full min-w-0 flex-col items-center"
         >
           <BookCard
             book={book}
             scale={scale}
             coverSlotHeightPx={rowCoverSlotHeights[Math.floor(index / columnCount)]}
             onClick={() => onOpen(book)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              if (confirm(`Delete "${book.title}"?`)) onDelete(book)
-            }}
+            onBookMenu={(point) => onBookMenu(book, point)}
           />
         </div>
       ))}

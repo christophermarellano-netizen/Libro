@@ -11,7 +11,6 @@ export interface ReaderSettings {
   fontFamily: string
   theme: ReaderTheme
   lineSpacing: number
-  margin: number
 }
 
 export function useReader(
@@ -46,18 +45,26 @@ export function useReader(
 
   const applySettings = useCallback(
     (rendition: Rendition) => {
-      rendition.themes.fontSize(`${settings.fontSize}%`)
-      rendition.themes.override('font-family', settings.fontFamily)
-      rendition.themes.override('line-height', String(settings.lineSpacing))
       applyTheme(rendition, settings.theme)
+      rendition.themes.fontSize(`${settings.fontSize}%`)
+
+      const usePublisherFont =
+        settings.fontFamily === 'original' || settings.fontFamily === 'Georgia, serif'
+      if (usePublisherFont) {
+        rendition.themes.removeOverride('font-family')
+      } else {
+        rendition.themes.font(settings.fontFamily)
+      }
+
+      rendition.themes.override('line-height', String(settings.lineSpacing), true)
 
       const container = containerRef.current
       if (container) {
-        container.style.paddingLeft = `${settings.margin}px`
-        container.style.paddingRight = `${settings.margin}px`
+        container.style.paddingLeft = ''
+        container.style.paddingRight = ''
       }
     },
-    [settings.fontSize, settings.fontFamily, settings.lineSpacing, settings.theme, settings.margin, applyTheme],
+    [settings.fontSize, settings.fontFamily, settings.lineSpacing, settings.theme, applyTheme],
   )
 
   useEffect(() => {
@@ -84,7 +91,6 @@ export function useReader(
         manager: 'continuous',
       })
       renditionRef.current = rendition
-      applySettings(rendition)
 
       const saved = await db.progress.get(bookId)
       if (saved?.cfi) {
@@ -110,6 +116,7 @@ export function useReader(
           percentage: pct,
           updatedAt: Date.now(),
         })
+        void import('../lib/sync').then(({ scheduleProgressSync }) => scheduleProgressSync(bookId))
       })
 
       if (!destroyed) setReady(true)
@@ -123,8 +130,9 @@ export function useReader(
       bookRef.current?.destroy()
       renditionRef.current = null
       bookRef.current = null
+      setReady(false)
     }
-  }, [epubBlob, bookId, applySettings, updateChapterLabel])
+  }, [epubBlob, bookId, updateChapterLabel])
 
   useEffect(() => {
     if (renditionRef.current && ready) {
@@ -166,7 +174,7 @@ export function useReader(
     return searchEpub(book as unknown as EpubBookRef, query)
   }, [])
 
-  const getRendition = () => renditionRef.current
+  const getRendition = useCallback(() => renditionRef.current, [])
 
   return {
     containerRef,

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { importEpubFile, refreshBookDimensions } from '../lib/importBook'
+import { importEpubFile, enrichImportedBook, refreshBookDimensions } from '../lib/importBook'
 import type { Book, LibrarySort } from '../types'
 
 function sortBooks(books: Book[], sort: LibrarySort): Book[] {
@@ -27,18 +27,32 @@ export function useBooks(sort: LibrarySort = 'recent') {
 
   const importBook = async (file: File) => {
     const book = await importEpubFile(file)
-    const id = await db.books.add(book as Book)
+    const id = (await db.books.add(book as Book)) as number
+    void enrichImportedBook(id).catch((error) => {
+      console.error('Background metadata enrichment failed', error)
+    })
+    const { scheduleBookUpload } = await import('../lib/sync')
+    scheduleBookUpload(id)
     return id
   }
 
   const deleteBook = async (id: number) => {
+    const book = await db.books.get(id)
     await db.books.delete(id)
     await db.progress.delete(id)
     await db.vocab.where('bookId').equals(id).delete()
+    await db.bookmarks.where('bookId').equals(id).delete()
+    if (book?.cloudId) {
+      const { scheduleBookDelete } = await import('../lib/sync')
+      scheduleBookDelete(book.cloudId)
+    }
   }
 
   const touchBook = async (id: number) => {
-    await db.books.update(id, { lastOpenedAt: Date.now() })
+    const now = Date.now()
+    await db.books.update(id, { lastOpenedAt: now, syncUpdatedAt: now })
+    const { scheduleBookUpload } = await import('../lib/sync')
+    scheduleBookUpload(id)
   }
 
   const refreshMetadata = async (book: Book) => {

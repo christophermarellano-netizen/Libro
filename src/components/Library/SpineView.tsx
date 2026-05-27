@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { Book } from '../../types'
+import { useLongPress } from '../../hooks/useLongPress'
+import { bookHeightMm } from '../../lib/bookDimensions'
 import {
-  defaultSpineHeight,
   getSpinePreset,
   scaledSpineWidth,
   type SpinePreset,
@@ -13,6 +14,7 @@ interface SpineViewProps {
   widthPx?: number
   showText?: boolean
   onClick?: () => void
+  onBookMenu?: (point: { x: number; y: number }) => void
   className?: string
 }
 
@@ -282,15 +284,25 @@ export function SpineView({
   widthPx: widthOverride,
   showText = true,
   onClick,
+  onBookMenu,
   className = '',
 }: SpineViewProps) {
   const widthPx = widthOverride ?? scaledSpineWidth(book, heightPx)
+  const { longPressProps, contextMenuProps, guardClick } = useLongPress(
+    (point) => onBookMenu?.(point),
+    { disabled: !onBookMenu },
+  )
 
-  if (onClick) {
+  if (onClick || onBookMenu) {
     return (
       <button
         type="button"
-        onClick={onClick}
+        onClick={(event) => {
+          guardClick(event)
+          if (!event.defaultPrevented) onClick?.()
+        }}
+        {...longPressProps}
+        {...contextMenuProps}
         aria-label={`${book.title} by ${book.author}`}
         className="cursor-pointer border-0 bg-transparent p-0"
       >
@@ -323,7 +335,7 @@ export function spineWidthPx(book: Book, heightPx: number): number {
 export function totalShelfWidth(books: Book[], scale: number, gap = 4): number {
   if (books.length === 0) return 0
   return books.reduce((sum, book, index) => {
-    const heightPx = Math.round(defaultSpineHeight(book) * scale)
+    const heightPx = Math.round(bookHeightMm(book) * scale)
     const width = scaledSpineWidth(book, heightPx)
     return sum + width + (index > 0 ? gap : 0)
   }, 0)

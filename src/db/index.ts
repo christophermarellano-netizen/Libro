@@ -26,6 +26,14 @@ export class LibroDatabase extends Dexie {
       bookmarks: '++id, bookId, cfi, createdAt',
       settings: 'id',
     })
+
+    this.version(3).stores({
+      books: '++id, cloudId, title, author, addedAt, lastOpenedAt',
+      progress: 'bookId',
+      vocab: '++id, cloudId, bookId, word, addedAt',
+      bookmarks: '++id, cloudId, bookId, cfi, createdAt',
+      settings: 'id',
+    })
   }
 }
 
@@ -39,7 +47,7 @@ export async function ensureSettings(): Promise<AppSettings> {
   const existing = await db.settings.get(1)
   if (existing) {
     const merged = { ...DEFAULT_SETTINGS, ...existing, id: 1 }
-    if (existing.readerMargin === undefined) {
+    if (existing.readerTranslationEnabled === undefined) {
       await db.settings.put(merged)
     }
     return merged
@@ -54,7 +62,16 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function updateSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const current = await ensureSettings()
-  const updated = { ...current, ...partial, id: 1 }
+  const updated = {
+    ...current,
+    ...partial,
+    id: 1,
+    syncUpdatedAt: Date.now(),
+  }
   await db.settings.put(updated)
+
+  const { scheduleSettingsSync } = await import('../lib/sync')
+  scheduleSettingsSync()
+
   return updated
 }

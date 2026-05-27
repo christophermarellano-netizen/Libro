@@ -1,11 +1,18 @@
+import { translateText as translateViaDevProxy } from './deeplDev'
+
+function deeplEdgeFunctionUrl(): string | null {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  if (!supabaseUrl) return null
+  return `${supabaseUrl}/functions/v1/deepl-translate`
+}
+
+function isDevProxyAvailable(): boolean {
+  return import.meta.env.DEV
+}
+
 export interface TranslationResult {
   text: string
   detectedSourceLang?: string
-}
-
-function deeplBasePath(apiKey: string): string {
-  // Free-tier keys end with :fx and use api-free.deepl.com
-  return apiKey.trim().endsWith(':fx') ? '/api/deepl-free' : '/api/deepl-pro'
 }
 
 export async function translateText(
@@ -14,27 +21,46 @@ export async function translateText(
   sourceLang = 'ES',
   targetLang = 'EN',
 ): Promise<TranslationResult> {
-  const base = deeplBasePath(apiKey)
-  const url = `${base}/v2/translate`
+  const body = JSON.stringify({
+    text: [text],
+    source_lang: sourceLang,
+    target_lang: targetLang,
+  })
+
+  if (isDevProxyAvailable()) {
+    return translateViaDevProxy(text, apiKey, sourceLang, targetLang)
+  }
+
+  const edgeUrl = deeplEdgeFunctionUrl()
+  if (!edgeUrl) {
+    throw new Error(
+      'Translation requires Supabase. Set VITE_SUPABASE_URL and deploy the deepl-translate Edge Function, or run locally with npm run dev.',
+    )
+  }
+
+  const { supabase } = await import('./supabase/client')
+  const session = supabase ? (await supabase.auth.getSession()).data.session : null
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-DeepL-Auth-Key': apiKey.trim(),
+  }
+
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  } else if (import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    headers.Authorization = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+  }
 
   let res: Response
   try {
-    res = await fetch(url, {
+    res = await fetch(edgeUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `DeepL-Auth-Key ${apiKey.trim()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: [text],
-        source_lang: sourceLang,
-        target_lang: targetLang,
-      }),
+      headers,
+      body,
     })
   } catch {
-    throw new Error(
-      'Network error reaching DeepL. Make sure the dev server is running (npm run dev).',
-    )
+    throw new Error('Network error reaching translation service.')
   }
 
   if (!res.ok) {
@@ -42,7 +68,7 @@ export async function translateText(
     if (res.status === 403) {
       throw new Error('DeepL rejected the request. Check your API key in Settings.')
     }
-    throw new Error(`DeepL error (${res.status}): ${err}`)
+    throw new Error(`Translation error (${res.status}): ${err}`)
   }
 
   const data = await res.json()

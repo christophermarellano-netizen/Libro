@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ContentsPanel } from '../components/Reader/ContentsPanel'
 import { EpubViewer, type WordTapEvent } from '../components/Reader/EpubViewer'
-import { PageControls } from '../components/Reader/PageControls'
+import { ReaderBottomBar } from '../components/Reader/ReaderBottomBar'
 import { ReaderSettingsPanel } from '../components/Reader/SettingsPanel'
 import { ReaderTopBar } from '../components/Reader/ReaderTopBar'
 import { SearchPanel } from '../components/Reader/SearchPanel'
 import { TranslationPopup } from '../components/Translation/TranslationPopup'
 import { useBookmarks } from '../hooks/useBookmarks'
 import { useBook } from '../hooks/useBooks'
+import { useDailyReadingTime } from '../hooks/useDailyReadingTime'
 import { useReader } from '../hooks/useReader'
 import { useSettings } from '../hooks/useSettings'
 import { useTranslate } from '../hooks/useTranslate'
 import type { ReaderTheme, TocEntry } from '../types'
+import type { ReaderSettings } from '../hooks/useReader'
 
 type ReaderPanel = 'none' | 'settings' | 'menu' | 'search'
 
@@ -31,13 +33,36 @@ export function ReaderPage() {
   const [contextMode, setContextMode] = useState(false)
   const [toc, setToc] = useState<TocEntry[]>([])
 
-  const readerSettings = {
-    fontSize: settings?.readerFontSize ?? 100,
-    fontFamily: settings?.readerFontFamily ?? 'Georgia, serif',
-    theme: settings?.readerTheme ?? 'light',
-    lineSpacing: settings?.readerLineSpacing ?? 1.5,
-    margin: settings?.readerMargin ?? 16,
-  }
+  const persistedReaderSettings = useMemo<ReaderSettings>(
+    () => ({
+      fontSize: settings?.readerFontSize ?? 100,
+      fontFamily: settings?.readerFontFamily ?? 'original',
+      theme: settings?.readerTheme ?? 'light',
+      lineSpacing: settings?.readerLineSpacing ?? 1.5,
+    }),
+    [
+      settings?.readerFontSize,
+      settings?.readerFontFamily,
+      settings?.readerTheme,
+      settings?.readerLineSpacing,
+    ],
+  )
+
+  const [readerSettings, setReaderSettings] = useState<ReaderSettings>(persistedReaderSettings)
+
+  useEffect(() => {
+    setReaderSettings(persistedReaderSettings)
+  }, [persistedReaderSettings])
+
+  const [translationEnabled, setTranslationEnabled] = useState(
+    () => settings?.readerTranslationEnabled ?? true,
+  )
+
+  useEffect(() => {
+    if (settings?.readerTranslationEnabled !== undefined) {
+      setTranslationEnabled(settings.readerTranslationEnabled)
+    }
+  }, [settings?.readerTranslationEnabled])
 
   const {
     containerRef,
@@ -45,13 +70,14 @@ export function ReaderPage() {
     percentage,
     currentCfi,
     chapterLabel,
-    goToPercentage,
     goToCfi,
     goToHref,
     getToc,
     search,
     getRendition,
   } = useReader(book?.epubBlob, bookId, readerSettings)
+
+  const { formatted: readingTimeLabel } = useDailyReadingTime(ready)
 
   const anyPanelOpen = panel !== 'none'
   const showChrome = chromeVisible || anyPanelOpen || !!tap
@@ -84,6 +110,11 @@ export function ReaderPage() {
 
   const handleWordTap = useCallback(
     (event: WordTapEvent) => {
+      if (!translationEnabled) {
+        if (panel === 'none') setChromeVisible((visible) => !visible)
+        return
+      }
+
       setTap(event)
       setContextMode(false)
       setTranslation(null)
@@ -94,8 +125,20 @@ export function ReaderPage() {
           // error surfaced via translateError in hook
         })
     },
-    [translate],
+    [panel, translate, translationEnabled],
   )
+
+  const handleToggleTranslation = () => {
+    const next = !translationEnabled
+    setTranslationEnabled(next)
+    if (!next) {
+      setTap(null)
+      setTranslation(null)
+      setContextMode(false)
+    }
+    void save({ readerTranslationEnabled: next })
+    setChromeVisible(true)
+  }
 
   const handleBookmarkToggle = async () => {
     if (!currentCfi) return
@@ -126,15 +169,15 @@ export function ReaderPage() {
     fontFamily?: string
     theme?: ReaderTheme
     lineSpacing?: number
-    margin?: number
   }) => {
+    setReaderSettings((current) => ({ ...current, ...partial }))
+
     const updates: Record<string, unknown> = {}
     if (partial.fontSize !== undefined) updates.readerFontSize = partial.fontSize
     if (partial.fontFamily !== undefined) updates.readerFontFamily = partial.fontFamily
     if (partial.theme !== undefined) updates.readerTheme = partial.theme
     if (partial.lineSpacing !== undefined) updates.readerLineSpacing = partial.lineSpacing
-    if (partial.margin !== undefined) updates.readerMargin = partial.margin
-    save(updates)
+    void save(updates)
   }
 
   if (!book) {
@@ -154,6 +197,7 @@ export function ReaderPage() {
         <EpubViewer
           containerRef={containerRef}
           ready={ready}
+          translationEnabled={translationEnabled}
           onWordTap={handleWordTap}
           onBackgroundTap={handleBackgroundTap}
           getRendition={getRendition}
@@ -162,44 +206,44 @@ export function ReaderPage() {
 
       <ReaderTopBar
         visible={showChrome && panel !== 'search'}
-        theme={readerSettings.theme}
         title={book.title}
+        author={book.author}
         chapterLabel={chapterLabel}
-        bookmarked={bookmarked}
-        onSearch={() => openPanel('search')}
-        onContents={() => openPanel('menu')}
-        onBookmark={handleBookmarkToggle}
-        onSettings={() => openPanel('settings')}
       />
 
       <div
-        className={`reader-chrome-bottom pointer-events-auto absolute inset-x-0 bottom-0 z-50 backdrop-blur-xl transition-transform duration-300 ease-out ${
+        className={`pointer-events-auto absolute inset-x-0 bottom-0 z-50 transition-transform duration-300 ease-out ${
           showChrome && panel !== 'search' ? 'translate-y-0' : 'translate-y-full pointer-events-none'
         }`}
         data-reader-theme={readerSettings.theme}
       >
-        <PageControls
-          percentage={percentage}
-          theme={readerSettings.theme}
-          onChange={goToPercentage}
+        <ReaderBottomBar
+          chromeVisible={showChrome && panel !== 'search'}
+          readingTimeLabel={readingTimeLabel}
+          progressPercent={percentage}
+          translationEnabled={translationEnabled}
+          bookmarked={bookmarked}
+          onContents={() => openPanel('menu')}
+          onSearch={() => openPanel('search')}
+          onSettings={() => openPanel('settings')}
+          onBookmark={() => void handleBookmarkToggle()}
+          onToggleTranslation={handleToggleTranslation}
         />
       </div>
 
       <ReaderSettingsPanel
         open={panel === 'settings'}
-        theme={readerSettings.theme}
         onClose={closePanel}
         fontSize={readerSettings.fontSize}
         fontFamily={readerSettings.fontFamily}
         readerTheme={readerSettings.theme}
         lineSpacing={readerSettings.lineSpacing}
-        margin={readerSettings.margin}
         onChange={saveReaderSettings}
       />
 
       <ContentsPanel
         open={panel === 'menu'}
-        theme={readerSettings.theme}
+        bookTitle={book.title}
         items={toc}
         bookmarks={bookmarks}
         onClose={closePanel}
@@ -222,7 +266,7 @@ export function ReaderPage() {
         onSelect={(cfi) => void goToCfi(cfi)}
       />
 
-      {tap && (
+      {tap && translationEnabled && (
         <TranslationPopup
           word={contextMode ? 'Context' : tap.word}
           translation={translation}

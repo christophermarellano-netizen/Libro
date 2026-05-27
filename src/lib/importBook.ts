@@ -1,5 +1,6 @@
 import type { DimensionSource } from '../types'
-import { parseEpub, createPlaceholderCover } from './epub'
+import { db } from '../db'
+import { parseEpub, createPlaceholderCover, isValidImageBlob } from './epub'
 import * as openLibrary from './openLibrary'
 import * as googleBooks from './googleBooks'
 import * as amazon from './amazon'
@@ -312,13 +313,15 @@ async function lookupMetadata(title: string, author: string, isbn?: string, page
 
 async function resolveCover(
   embeddedCover: Blob | undefined,
-  embeddedSize: { width?: number; height?: number },
+  _embeddedSize: { width?: number; height?: number },
   onlineCoverUrl: string | undefined,
   isbn: string | undefined,
   title: string,
 ): Promise<{ coverBlob: Blob; coverSource: CoverSource }> {
-  const embeddedOk = embeddedCover && embeddedSize.width && embeddedSize.width >= 200
-  if (embeddedOk) return { coverBlob: embeddedCover, coverSource: 'epub' }
+  // Always keep the cover bundled with the user's EPUB when present.
+  if (embeddedCover && embeddedCover.size > 0) {
+    return { coverBlob: embeddedCover, coverSource: 'epub' }
+  }
 
   if (onlineCoverUrl) {
     const blob = await fetchCoverBlob(onlineCoverUrl)
@@ -335,8 +338,6 @@ async function resolveCover(
     const blob = await fetchCoverBlob(olUrl)
     if (blob) return { coverBlob: blob, coverSource: 'open-library' }
   }
-
-  if (embeddedCover) return { coverBlob: embeddedCover, coverSource: 'epub' }
 
   const placeholder = await createPlaceholderCover(title)
   return { coverBlob: placeholder, coverSource: 'placeholder' }
@@ -370,31 +371,29 @@ export async function importEpubFile(file: File): Promise<Omit<Book, 'id'>> {
   const epubBlob = file.slice(0, file.size, 'application/epub+zip')
   const meta = await parseEpub(epubBlob)
 
-  let lookup = await lookupMetadata(meta.title, meta.author, meta.isbn, meta.pageCount)
+  let coverBlob: Blob
+  let coverSource: CoverSource
 
-  const { coverBlob, coverSource } = await resolveCover(
-    meta.coverBlob,
-    { width: meta.coverWidth, height: meta.coverHeight },
-    lookup.coverUrl,
-    lookup.isbn,
-    meta.title,
-  )
-
-  if (lookup.needsCoverRefinement) {
-    const refined = await refineDimensionsFromCover(
-      coverBlob,
-      lookup.pageCount ?? meta.pageCount,
-      lookup.printType,
+  if (meta.coverBlob && (await isValidImageBlob(meta.coverBlob))) {
+    coverBlob = meta.coverBlob
+    coverSource = 'epub'
+  } else {
+    const resolved = await resolveCover(
+      undefined,
+      {},
+      undefined,
+      meta.isbn,
+      meta.title,
     )
-    lookup = {
-      ...lookup,
-      physicalHeightMm: refined.physicalHeightMm,
-      physicalWidthMm: refined.physicalWidthMm,
-      physicalThicknessMm: refined.physicalThicknessMm,
-      dimensionSource: refined.dimensionSource,
-      needsCoverRefinement: false,
-    }
+    coverBlob = resolved.coverBlob
+    coverSource = resolved.coverSource
   }
+
+  const refined = await refineDimensionsFromCover(
+    coverBlob,
+    meta.pageCount,
+    undefined,
+  )
 
   const { spineColorHex, spineTextColorHex } = await extractSpineColors(coverBlob)
 
@@ -404,17 +403,66 @@ export async function importEpubFile(file: File): Promise<Omit<Book, 'id'>> {
     epubBlob,
     coverBlob,
     coverSource,
-    isbn: lookup.isbn,
-    pageCount: lookup.pageCount ?? meta.pageCount,
-    printType: lookup.printType,
-    physicalHeightMm: lookup.physicalHeightMm,
-    physicalWidthMm: lookup.physicalWidthMm,
-    physicalThicknessMm: lookup.physicalThicknessMm,
-    dimensionSource: lookup.dimensionSource,
+    isbn: meta.isbn,
+    pageCount: meta.pageCount,
+    physicalHeightMm: refined.physicalHeightMm,
+    physicalWidthMm: refined.physicalWidthMm,
+    physicalThicknessMm: refined.physicalThicknessMm,
+    dimensionSource: refined.dimensionSource,
     spineColorHex,
     spineTextColorHex,
     addedAt: Date.now(),
   }
+}
+
+export async function enrichImportedBook(bookId: number): Promise<void> {
+  const book = await db.books.get(bookId)
+  if (!book) return
+
+  const updates: Partial<Book> = {}
+
+  try {
+    const meta = await parseEpub(book.epubBlob)
+    if (meta.coverBlob && (await isValidImageBlob(meta.coverBlob))) {
+      updates.coverBlob = meta.coverBlob
+      updates.coverSource = 'epub'
+      const colors = await extractSpineColors(meta.coverBlob)
+      updates.spineColorHex = colors.spineColorHex
+      updates.spineTextColorHex = colors.spineTextColorHex
+    }
+  } catch {
+    // Keep the existing cover if the EPUB cannot be re-read.
+  }
+
+  const lookup = await lookupMetadata(
+    book.title,
+    book.author,
+    book.isbn,
+    book.pageCount,
+  )
+
+  updates.isbn = lookup.isbn ?? book.isbn
+  updates.pageCount = lookup.pageCount ?? book.pageCount
+  updates.printType = lookup.printType
+
+  const coverForDims = updates.coverBlob ?? book.coverBlob
+  if (lookup.needsCoverRefinement) {
+    const refined = await refineDimensionsFromCover(
+      coverForDims,
+      updates.pageCount ?? book.pageCount,
+      updates.printType ?? book.printType,
+    )
+    Object.assign(updates, refined)
+  } else {
+    updates.physicalHeightMm = lookup.physicalHeightMm
+    updates.physicalWidthMm = lookup.physicalWidthMm
+    updates.physicalThicknessMm = lookup.physicalThicknessMm
+    updates.dimensionSource = lookup.dimensionSource
+  }
+
+  await db.books.update(bookId, { ...updates, syncUpdatedAt: Date.now() })
+  const { scheduleBookUpload } = await import('../lib/sync')
+  scheduleBookUpload(bookId)
 }
 
 export async function refreshBookDimensions(book: Book): Promise<Partial<Book>> {
