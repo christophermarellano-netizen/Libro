@@ -256,53 +256,7 @@ export function SettingsPage() {
             &quot;Add to Home Screen&quot; or &quot;Install&quot; option.
           </p>
         </section>
-
-        {import.meta.env.DEV && <DevToolsSection />}
       </div>
     </div>
-  )
-}
-
-function DevToolsSection() {
-  const [seeding, setSeeding] = useState(false)
-  const [seedMessage, setSeedMessage] = useState<string | null>(null)
-
-  const handleSeed = async () => {
-    setSeeding(true)
-    setSeedMessage(null)
-    try {
-      const { seedPlaceholderBooks, countPlaceholderBooks, refreshPlaceholderBooks } =
-        await import('../lib/placeholderBooks')
-      const existing = await countPlaceholderBooks()
-      if (existing >= 40) {
-        const updated = await refreshPlaceholderBooks()
-        setSeedMessage(`Refreshed ${updated} test books with updated dimensions.`)
-        return
-      }
-      const added = await seedPlaceholderBooks(40 - existing)
-      setSeedMessage(`Added ${added} placeholder books.`)
-    } catch (e) {
-      setSeedMessage(e instanceof Error ? e.message : 'Failed to seed books')
-    } finally {
-      setSeeding(false)
-    }
-  }
-
-  return (
-    <section className="rounded-xl border border-dashed border-libro-border bg-libro-surface p-6">
-      <h2 className="mb-1 text-base font-semibold">Developer</h2>
-      <p className="mb-4 text-sm text-libro-muted">
-        Add 40 test ebooks with varied sizes, titles, and solid-color covers for UI testing.
-      </p>
-      <button
-        type="button"
-        disabled={seeding}
-        onClick={handleSeed}
-        className="w-full rounded-lg border border-libro-border px-4 py-3 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
-      >
-        {seeding ? 'Adding books…' : 'Add 40 test books'}
-      </button>
-      {seedMessage && <p className="mt-3 text-sm text-libro-muted">{seedMessage}</p>}
-    </section>
   )
 }

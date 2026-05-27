@@ -44,6 +44,8 @@ export function useReader(
   const renditionRef = useRef<Rendition | null>(null)
   const tocRef = useRef<TocEntry[]>([])
   const initGenerationRef = useRef(0)
+  const epubBlobRef = useRef(epubBlob)
+  epubBlobRef.current = epubBlob
   const [retryCount, setRetryCount] = useState(0)
   const [ready, setReady] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -95,8 +97,12 @@ export function useReader(
     rendition.resize(container.clientWidth, container.clientHeight)
   }, [])
 
+  const epubSignature =
+    bookId && epubBlob ? `${bookId}:${epubBlob.size}:${epubBlob.type}` : null
+
   useEffect(() => {
-    if (!epubBlob || !containerRef.current || !bookId) return
+    const blob = epubBlobRef.current
+    if (!epubSignature || !blob || !containerRef.current || !bookId) return
 
     const generation = ++initGenerationRef.current
     let destroyed = false
@@ -109,7 +115,7 @@ export function useReader(
     const init = async () => {
       try {
         setLoadingProgress(18)
-        const arrayBuffer = await epubBlob.arrayBuffer()
+        const arrayBuffer = await blob.arrayBuffer()
         if (destroyed || generation !== initGenerationRef.current) return
 
         setLoadingProgress(32)
@@ -200,7 +206,7 @@ export function useReader(
       setReady(false)
       setLoadingProgress(0)
     }
-  }, [epubBlob, bookId, retryCount, updateChapterLabel, applySettings, resizeRendition])
+  }, [epubSignature, bookId, retryCount, updateChapterLabel])
 
   useEffect(() => {
     if (renditionRef.current && ready) {

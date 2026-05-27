@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect } from 'react'
 import type { Book } from '../../types'
 import { displaySizePx } from '../../lib/bookDimensions'
 import { getSpinePreset } from '../../lib/spinePresets'
+import { useBookCoverUrl } from '../../hooks/useBookCoverUrl'
 import { useLongPress } from '../../hooks/useLongPress'
 import jointSeamSrc from '../../assets/joint-seam.png'
 
@@ -21,23 +22,14 @@ export function BookCard({
   onBookMenu,
 }: BookCardProps) {
   const { widthPx, heightPx } = displaySizePx(book, scale)
-  const [coverFailed, setCoverFailed] = useState(false)
   const preset = getSpinePreset(book)
-
-  const coverSrc = useMemo(() => {
-    if (coverFailed || !book.coverBlob || book.coverBlob.size === 0) return null
-    if (book.coverSource === 'placeholder') return null
-    return URL.createObjectURL(book.coverBlob)
-  }, [book.coverBlob, book.coverBlob?.size, book.coverSource, book.id, coverFailed])
+  const { src: coverSrc, setFailed: setCoverFailed } = useBookCoverUrl(
+    book.coverBlob,
+  )
 
   useEffect(() => {
     setCoverFailed(false)
-  }, [book.id, book.coverBlob?.size])
-
-  useEffect(() => {
-    if (!coverSrc) return
-    return () => URL.revokeObjectURL(coverSrc)
-  }, [coverSrc])
+  }, [book.id, book.coverBlob?.size, setCoverFailed])
 
   const { longPressProps, contextMenuProps, guardClick } = useLongPress(
     (point) => onBookMenu?.(point),

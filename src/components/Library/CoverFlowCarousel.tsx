@@ -2,8 +2,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import { motion, useMotionValue, animate } from 'framer-motion'
 import type { Book } from '../../types'
 import { displaySizePx, libraryDisplayScale, LIBRARY_ROW_TARGET_HEIGHT } from '../../lib/bookDimensions'
-import { isSeedPlaceholderBook } from '../../lib/placeholderBooks'
 import { getSpinePreset } from '../../lib/spinePresets'
+import { useBookCoverUrl } from '../../hooks/useBookCoverUrl'
 import { SpineView, spineWidthPx } from './SpineView'
 import jointSeamSrc from '../../assets/joint-seam.png'
 
@@ -117,23 +117,10 @@ function CoverFlowBook({
   const isFocused = mode === 'focused'
   const isClosing = mode === 'closing'
   const isActiveBook = mode !== 'spine'
-  const coverSrc = useMemo(() => {
-    if (!isActiveBook || useFallbackCover || !book.coverBlob || book.coverBlob.size === 0) {
-      return null
-    }
-    return URL.createObjectURL(book.coverBlob)
-  }, [
-    isActiveBook,
-    useFallbackCover,
-    book.id,
-    book.coverBlob?.size,
-    book.coverBlob?.type,
-  ])
-
-  useEffect(() => {
-    if (!coverSrc) return
-    return () => URL.revokeObjectURL(coverSrc)
-  }, [coverSrc])
+  const { src: coverSrc, setFailed: setCoverFailed } = useBookCoverUrl(
+    book.coverBlob,
+    isActiveBook && !useFallbackCover,
+  )
   const bookTurnTransition = mode === 'closing' ? closeTurnTransition : turnTransition
   const handleClick = () => {
     // #region agent log
@@ -219,7 +206,10 @@ function CoverFlowBook({
               src={coverSrc}
               alt={book.title}
               className="block h-full w-full object-cover"
-              onError={onCoverError}
+              onError={() => {
+                setCoverFailed(true)
+                onCoverError()
+              }}
             />
           )}
           {isFocused && (
@@ -764,11 +754,8 @@ export const CoverFlowCarousel = forwardRef<CoverFlowCarouselHandle, CoverFlowCa
               const preset = getSpinePreset(book)
               const fallbackBg = preset.bg
               const fallbackFg = preset.fg
-              const isMockBook =
-                book.coverSource === 'placeholder' && isSeedPlaceholderBook(book)
               const hasCoverBlob = Boolean(book.coverBlob && book.coverBlob.size > 0)
-              const useFallbackCover =
-                isMockBook || !hasCoverBlob || failedCovers.has(coverKey)
+              const useFallbackCover = !hasCoverBlob || failedCovers.has(coverKey)
               const width = slotWidth(i, focusedIndex)
               const visualCoverWidth = bookSize(book).widthPx
               const height = bookSize(book).heightPx

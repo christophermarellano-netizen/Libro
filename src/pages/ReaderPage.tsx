@@ -97,7 +97,7 @@ export function ReaderPage() {
     if (!showChrome || anyPanelOpen || tap) return
     const timer = window.setTimeout(() => setChromeVisible(false), 3500)
     return () => window.clearTimeout(timer)
-  }, [showChrome, anyPanelOpen, tap, percentage])
+  }, [showChrome, anyPanelOpen, tap])
 
   const openPanel = (next: ReaderPanel) => {
     setPanel(next)
@@ -257,6 +257,7 @@ export function ReaderPage() {
       />
 
       <div
+        data-reader-chrome
         className={`pointer-events-auto absolute inset-x-0 bottom-0 z-50 transition-transform duration-300 ease-out ${
           showChrome && panel !== 'search' ? 'translate-y-0' : 'translate-y-full pointer-events-none'
         }`}

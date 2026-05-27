@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from '../components/Layout/TopBar'
@@ -10,7 +10,7 @@ import { LibrarySubHeader } from '../components/Library/LibrarySubHeader'
 import { ShelfOverview } from '../components/Library/ShelfOverview'
 import { useBooks } from '../hooks/useBooks'
 import { useSettings } from '../hooks/useSettings'
-import { PLACEHOLDER_REFRESH_KEY, PLACEHOLDER_SEED_KEY, refreshPlaceholderBooks, seedPlaceholderBooks } from '../lib/placeholderBooks'
+import { deleteSeedPlaceholderBooks, SEED_BOOKS_REMOVED_KEY } from '../lib/deleteSeedPlaceholderBooks'
 import { enrichImportedBook } from '../lib/importBook'
 import type { Book, LibrarySort, LibraryView } from '../types'
 
@@ -34,32 +34,21 @@ export function LibraryPage() {
     if (view !== 'shelf') setFocusedBook(null)
   }, [view])
 
-  const seedStarted = useRef(false)
-
   useEffect(() => {
-    if (!import.meta.env.DEV) return
-    if (seedStarted.current) return
-    if (localStorage.getItem(PLACEHOLDER_SEED_KEY)) return
-    if (books.length > 0) return
-    seedStarted.current = true
-    void seedPlaceholderBooks(40).then(() => {
-      localStorage.setItem(PLACEHOLDER_SEED_KEY, '1')
+    if (localStorage.getItem(SEED_BOOKS_REMOVED_KEY)) return
+    void deleteSeedPlaceholderBooks().then(() => {
+      localStorage.setItem(SEED_BOOKS_REMOVED_KEY, '1')
+      localStorage.removeItem('libro-placeholder-seed-v2')
+      sessionStorage.removeItem('libro-placeholder-dims-v2')
     })
-  }, [books.length])
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    if (sessionStorage.getItem(PLACEHOLDER_REFRESH_KEY) || books.length === 0) return
-    sessionStorage.setItem(PLACEHOLDER_REFRESH_KEY, '1')
-    void refreshPlaceholderBooks()
-  }, [books.length])
+  }, [])
 
   useEffect(() => {
     const refreshKey = 'libro-epub-covers-v2'
     if (sessionStorage.getItem(refreshKey) || books.length === 0) return
     sessionStorage.setItem(refreshKey, '1')
     books
-      .filter((book) => book.coverSource !== 'placeholder' && book.id != null)
+      .filter((book) => book.id != null && book.coverSource !== 'epub')
       .forEach((book) => {
         void enrichImportedBook(book.id!)
       })

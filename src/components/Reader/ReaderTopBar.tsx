@@ -18,6 +18,7 @@ export function ReaderTopBar({
 
   return (
     <header
+      data-reader-chrome
       className={`pointer-events-auto absolute inset-x-0 top-0 z-50 border-b border-libro-border bg-libro-surface transition-transform duration-300 ease-out ${
         visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
       }`}
