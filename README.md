@@ -53,7 +53,12 @@ Libro can sync your library, reading progress, bookmarks, vocab, and settings ac
      - `https://libro-oy6l.vercel.app/**`
      - `http://localhost:3000/**`
    - Set `VITE_APP_URL=https://libro-oy6l.vercel.app` in Vercel environment variables.
-5. Sign in via **Settings → Cloud Sync** on the **live app** (not localhost), then open the magic link on the same device.
+5. In Supabase **Authentication → Email Templates → Magic Link**, include the OTP token so users receive a 6-digit code, for example:
+   ```
+   Your Libro sign-in code: {{ .Token }}
+   ```
+   (You can keep a magic link in the same email as a fallback for desktop.)
+6. Sign in via **Settings → Cloud Sync** on the live app, then enter the 6-digit code from your email.
 
 Without Supabase, books stay in local IndexedDB. Use **Settings → Backup & Restore** to move your library manually.
 

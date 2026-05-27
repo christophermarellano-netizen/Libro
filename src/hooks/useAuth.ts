@@ -29,12 +29,22 @@ export function useAuth() {
     return () => subscription.subscription.unsubscribe()
   }, [])
 
-  const signInWithEmail = async (email: string) => {
+  const requestEmailOtp = async (email: string) => {
     if (!supabase) throw new Error('Supabase is not configured')
     const redirectTo = `${getAppUrl()}/settings`
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { emailRedirectTo: redirectTo },
+    })
+    if (error) throw error
+  }
+
+  const verifyEmailOtp = async (email: string, token: string) => {
+    if (!supabase) throw new Error('Supabase is not configured')
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: 'email',
     })
     if (error) throw error
   }
@@ -50,7 +60,8 @@ export function useAuth() {
     session,
     loading,
     configured: isSupabaseConfigured,
-    signInWithEmail,
+    requestEmailOtp,
+    verifyEmailOtp,
     signOut,
   }
 }

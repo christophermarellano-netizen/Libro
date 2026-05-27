@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { CloudSyncSignIn } from '../components/Auth/CloudSyncSignIn'
 import { downloadLibraryBackup, importLibraryBackup } from '../lib/backup'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
@@ -12,15 +13,12 @@ function formatSyncTime(ts: number | null): string {
 
 export function SettingsPage() {
   const { settings, save } = useSettings()
-  const { user, configured, loading: authLoading, signInWithEmail, signOut } = useAuth()
+  const { user, configured, loading: authLoading, requestEmailOtp, verifyEmailOtp, signOut } = useAuth()
   const { status, lastSyncedAt, error, syncNow } = useSync()
 
   const [apiKeyDraft, setApiKeyDraft] = useState<string | null>(null)
   const apiKey = apiKeyDraft ?? settings?.deeplApiKey ?? ''
   const [keySaved, setKeySaved] = useState(false)
-  const [email, setEmail] = useState('')
-  const [authMessage, setAuthMessage] = useState<string | null>(null)
-  const [authError, setAuthError] = useState<string | null>(null)
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
   const [backupBusy, setBackupBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -46,17 +44,6 @@ export function SettingsPage() {
   const handleApiKeyBlur = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     void persistApiKey(apiKey)
-  }
-
-  const handleSignIn = async () => {
-    setAuthError(null)
-    setAuthMessage(null)
-    try {
-      await signInWithEmail(email)
-      setAuthMessage('Check your email for a sign-in link.')
-    } catch (e) {
-      setAuthError(e instanceof Error ? e.message : 'Sign-in failed')
-    }
   }
 
   const handleSyncNow = async () => {
@@ -116,7 +103,7 @@ export function SettingsPage() {
             <h2 className="mb-1 text-base font-semibold">Cloud Sync</h2>
             <p className="mb-4 text-sm text-libro-muted">
               Sign in on your phone and laptop to keep your library, reading progress, and settings
-              in sync.
+              in sync. Enter the 6-digit code from your email — no link required.
             </p>
 
             {authLoading ? (
@@ -151,25 +138,10 @@ export function SettingsPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  className="w-full rounded-lg border border-libro-border bg-libro-bg px-4 py-3"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleSignIn()}
-                  disabled={!email.trim()}
-                  className="w-full rounded-lg bg-libro-accent px-4 py-3 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-                >
-                  Send magic link
-                </button>
-                {authMessage && <p className="text-sm text-green-700">{authMessage}</p>}
-                {authError && <p className="text-sm text-red-600">{authError}</p>}
-              </div>
+              <CloudSyncSignIn
+                onRequestCode={requestEmailOtp}
+                onVerifyCode={verifyEmailOtp}
+              />
             )}
           </section>
         )}
