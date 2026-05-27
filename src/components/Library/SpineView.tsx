@@ -21,18 +21,31 @@ interface SpineViewProps {
 const TITLE_MIN_PX = 5
 const AUTHOR_MIN_PX = 4
 const MAX_TITLE_FONT_PX = 100
-const FIT_SAFETY_PX = 2
+const TITLE_FIT_SAFETY_PX = 5
+const AUTHOR_FIT_SAFETY_PX = 2
 const SPINE_TEXT_INSET_PX = 4
+
+function availableContentSize(container: HTMLElement): { width: number; height: number } {
+  const style = getComputedStyle(container)
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  return {
+    width: Math.max(0, container.clientWidth - padX),
+    height: Math.max(0, container.clientHeight - padY),
+  }
+}
 
 function fitsTitleInBox(
   textEl: HTMLElement,
   maxWidth: number,
   maxHeight: number,
 ): boolean {
-  const { width, height } = textEl.getBoundingClientRect()
+  const rect = textEl.getBoundingClientRect()
+  const width = Math.max(rect.width, textEl.scrollWidth)
+  const height = Math.max(rect.height, textEl.scrollHeight)
   return (
-    width <= maxWidth - FIT_SAFETY_PX &&
-    height <= maxHeight - FIT_SAFETY_PX
+    width <= maxWidth - TITLE_FIT_SAFETY_PX &&
+    height <= maxHeight - TITLE_FIT_SAFETY_PX
   )
 }
 
@@ -42,9 +55,20 @@ function fitsAuthorInBox(
   maxHeight: number,
 ): boolean {
   return (
-    textEl.scrollWidth <= maxWidth - FIT_SAFETY_PX &&
-    textEl.scrollHeight <= maxHeight - FIT_SAFETY_PX
+    textEl.scrollWidth <= maxWidth - AUTHOR_FIT_SAFETY_PX &&
+    textEl.scrollHeight <= maxHeight - AUTHOR_FIT_SAFETY_PX
   )
+}
+
+function maxTitleFontSize(
+  text: string,
+  maxWidth: number,
+  maxHeight: number,
+): number {
+  const chars = Math.max(text.length, 1)
+  const byHeight = maxHeight / (chars * 1.12)
+  const byWidth = maxWidth * 1.35
+  return Math.min(MAX_TITLE_FONT_PX, byHeight, byWidth)
 }
 
 function binarySearchFontSize(
@@ -97,17 +121,25 @@ function SpineTitle({
     if (!container || !titleEl) return
 
     const measureAndFit = () => {
-      if (container.clientWidth <= 0 || container.clientHeight <= 0) return
+      const { width: maxWidth, height: maxHeight } = availableContentSize(container)
+      if (maxWidth <= 0 || maxHeight <= 0) return
+
+      const upper = Math.max(
+        TITLE_MIN_PX,
+        maxTitleFontSize(displayTitle, maxWidth, maxHeight),
+      )
+
       const fitted = binarySearchFontSize(
         titleEl,
-        container.clientWidth,
-        container.clientHeight,
+        maxWidth,
+        maxHeight,
         TITLE_MIN_PX,
-        MAX_TITLE_FONT_PX,
+        upper,
         fitsTitleInBox,
       )
-      titleEl.style.fontSize = `${fitted}px`
-      setFontSize(fitted)
+      const safeSize = Math.max(TITLE_MIN_PX, fitted - 0.5)
+      titleEl.style.fontSize = `${safeSize}px`
+      setFontSize(safeSize)
     }
 
     measureAndFit()
@@ -119,7 +151,7 @@ function SpineTitle({
   return (
     <span
       ref={containerRef}
-      className="flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+      className="flex h-full min-h-0 w-full items-center justify-center"
       style={{ paddingInline: SPINE_TEXT_INSET_PX }}
     >
       <span
@@ -158,9 +190,8 @@ function SpineAuthor({
     if (!container || !textEl) return
 
     const measureAndFit = () => {
-      if (container.clientWidth <= 0 || container.clientHeight <= 0) return
-      const availableWidth = container.clientWidth
-      const availableHeight = container.clientHeight
+      const { width: availableWidth, height: availableHeight } = availableContentSize(container)
+      if (availableWidth <= 0 || availableHeight <= 0) return
       textEl.style.maxWidth = `${availableWidth}px`
       textEl.style.display = 'block'
 

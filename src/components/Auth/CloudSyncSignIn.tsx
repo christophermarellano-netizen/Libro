@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  friendlyAuthError,
+  isRateLimitError,
+  readLastOtpRequest,
+  secondsUntilOtpResend,
+  writeLastOtpRequest,
+} from '../../lib/authErrors'
 
 const RESEND_COOLDOWN_SEC = 60
 
@@ -8,13 +15,16 @@ interface CloudSyncSignInProps {
 }
 
 export function CloudSyncSignIn({ onRequestCode, onVerifyCode }: CloudSyncSignInProps) {
-  const [email, setEmail] = useState('')
+  const lastRequest = readLastOtpRequest()
+  const [email, setEmail] = useState(lastRequest?.email ?? '')
   const [code, setCode] = useState('')
   const [codeSent, setCodeSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [resendIn, setResendIn] = useState(0)
+  const [resendIn, setResendIn] = useState(() =>
+    lastRequest ? secondsUntilOtpResend(lastRequest.email) : 0,
+  )
   const codeInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -31,9 +41,19 @@ export function CloudSyncSignIn({ onRequestCode, onVerifyCode }: CloudSyncSignIn
     }
   }, [codeSent])
 
-  const startCooldown = () => setResendIn(RESEND_COOLDOWN_SEC)
+  const startCooldown = () => {
+    writeLastOtpRequest(email)
+    setResendIn(Math.max(RESEND_COOLDOWN_SEC, secondsUntilOtpResend(email)))
+  }
 
   const handleSendCode = async () => {
+    const waitSec = secondsUntilOtpResend(email)
+    if (waitSec > 0) {
+      setResendIn(waitSec)
+      setError(`Please wait ${waitSec}s before requesting another code.`)
+      return
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -44,10 +64,22 @@ export function CloudSyncSignIn({ onRequestCode, onVerifyCode }: CloudSyncSignIn
       startCooldown()
       setMessage(`Enter the 6-digit code sent to ${email.trim()}.`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send sign-in code')
+      const raw = e instanceof Error ? e.message : 'Could not send sign-in code'
+      setError(friendlyAuthError(raw))
+      if (isRateLimitError(raw)) {
+        setResendIn(RESEND_COOLDOWN_SEC)
+      }
     } finally {
       setBusy(false)
     }
+  }
+
+  const handleEnterCodeInstead = () => {
+    if (!email.trim()) return
+    setCodeSent(true)
+    setCode('')
+    setError(null)
+    setMessage(`Enter the 6-digit code sent to ${email.trim()}.`)
   }
 
   const handleResend = async () => {
@@ -104,14 +136,23 @@ export function CloudSyncSignIn({ onRequestCode, onVerifyCode }: CloudSyncSignIn
         <button
           type="button"
           onClick={() => void handleSendCode()}
-          disabled={!email.trim() || busy}
+          disabled={!email.trim() || busy || resendIn > 0}
           className="w-full rounded-lg bg-libro-accent px-4 py-3 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
         >
-          {busy ? 'Sending…' : 'Send sign-in code'}
+          {busy ? 'Sending…' : resendIn > 0 ? `Send again in ${resendIn}s` : 'Send sign-in code'}
         </button>
+        {email.trim() && (
+          <button
+            type="button"
+            onClick={handleEnterCodeInstead}
+            className="w-full text-sm text-libro-muted underline-offset-2 hover:text-libro-text hover:underline"
+          >
+            Enter code instead
+          </button>
+        )}
         <p className="text-xs text-libro-muted">
           Works in the installed app on iPhone — enter the code here instead of tapping an email
-          link.
+          link. Supabase&apos;s default email service allows only a few messages per hour.
         </p>
         {message && <p className="text-sm text-green-700">{message}</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -28,7 +28,7 @@ export function ViewToggle({ view, onChange }: ViewToggleProps) {
           key={v.id}
           type="button"
           onClick={() => onChange(v.id)}
-          className={`inline-flex flex-1 items-center justify-center rounded-md px-3 py-1.5 text-sm transition ${
+          className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition ${
             view === v.id
               ? 'bg-libro-surface text-libro-text shadow-sm'
               : 'text-libro-muted hover:text-libro-text'
@@ -36,6 +36,7 @@ export function ViewToggle({ view, onChange }: ViewToggleProps) {
           title={v.label}
         >
           {v.icon}
+          <span>{v.label}</span>
         </button>
       ))}
     </div>

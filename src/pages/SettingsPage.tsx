@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CloudSyncSignIn } from '../components/Auth/CloudSyncSignIn'
+import { ImportButton } from '../components/Library/ImportButton'
 import { downloadLibraryBackup, importLibraryBackup } from '../lib/backup'
 import { useAuth } from '../hooks/useAuth'
+import { useBooks } from '../hooks/useBooks'
 import { useSettings } from '../hooks/useSettings'
 import { useSync } from '../hooks/useSync'
 
@@ -15,10 +17,15 @@ export function SettingsPage() {
   const { settings, save } = useSettings()
   const { user, configured, loading: authLoading, requestEmailOtp, verifyEmailOtp, signOut } = useAuth()
   const { status, lastSyncedAt, error, syncNow } = useSync()
+  const sort = settings?.librarySort ?? 'recent'
+  const { importBook } = useBooks(sort)
 
   const [apiKeyDraft, setApiKeyDraft] = useState<string | null>(null)
   const apiKey = apiKeyDraft ?? settings?.deeplApiKey ?? ''
   const [keySaved, setKeySaved] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importNotice, setImportNotice] = useState<string | null>(null)
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
   const [backupBusy, setBackupBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -44,6 +51,30 @@ export function SettingsPage() {
   const handleApiKeyBlur = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     void persistApiKey(apiKey)
+  }
+
+  const handleEbookImport = async (files: FileList) => {
+    setImporting(true)
+    setImportError(null)
+    setImportNotice(null)
+    const importedTitles: string[] = []
+    try {
+      for (const file of Array.from(files)) {
+        await importBook(file)
+        importedTitles.push(file.name.replace(/\.epub$/i, ''))
+      }
+      if (importedTitles.length > 0) {
+        setImportNotice(
+          importedTitles.length === 1
+            ? `Added “${importedTitles[0]}” to your library`
+            : `Added ${importedTitles.length} books to your library`,
+        )
+      }
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import failed')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const handleSyncNow = async () => {
@@ -85,19 +116,34 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="relative border-b border-libro-border bg-libro-surface">
-        <div className="relative px-4 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))] text-center">
+      <header className="relative shrink-0 border-b border-libro-border bg-libro-surface">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))]">
           <Link
             to="/"
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-libro-muted transition hover:text-libro-text"
+            className="justify-self-start flex min-h-11 min-w-11 items-center text-sm font-medium text-libro-muted transition hover:text-libro-text"
           >
             ← Back
           </Link>
           <h1 className="text-lg font-semibold">Settings</h1>
+          <div className="justify-self-end" aria-hidden="true" />
         </div>
       </header>
 
       <div className="mx-auto w-full max-w-lg flex-1 space-y-6 p-6">
+        <section className="rounded-xl border border-libro-border bg-libro-surface p-6">
+          <h2 className="mb-1 text-base font-semibold">Add Ebook</h2>
+          <p className="mb-4 text-sm text-libro-muted">
+            Import a Spanish EPUB to your library. You can select multiple files at once.
+          </p>
+          <ImportButton
+            variant="settings"
+            onImport={(files) => void handleEbookImport(files)}
+            importing={importing}
+          />
+          {importNotice && <p className="mt-3 text-sm text-green-700">{importNotice}</p>}
+          {importError && <p className="mt-3 text-sm text-red-600">{importError}</p>}
+        </section>
+
         {configured && (
           <section className="rounded-xl border border-libro-border bg-libro-surface p-6">
             <h2 className="mb-1 text-base font-semibold">Cloud Sync</h2>

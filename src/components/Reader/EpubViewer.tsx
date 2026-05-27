@@ -41,8 +41,8 @@ function extractWordFromRange(range: Range): string {
     if (child?.nodeType === Node.TEXT_NODE) {
       node = child
       offset = 0
-    } else if (el.textContent) {
-      return el.textContent.trim().split(/\s+/)[0] ?? ''
+    } else {
+      return ''
     }
   }
 
@@ -55,16 +55,16 @@ function extractWordFromRange(range: Range): string {
   while (start > 0 && /[\wáéíóúñüÁÉÍÓÚÑÜ'-]/.test(text[start - 1])) start--
   while (end < text.length && /[\wáéíóúñüÁÉÍÓÚÑÜ'-]/.test(text[end])) end++
 
-  return text.slice(start, end).trim()
+  const word = text.slice(start, end).trim()
+  if (word.length < 2) return ''
+  if (offset < start || offset > end) return ''
+  return word
 }
 
 function getWordAtPoint(doc: Document, x: number, y: number): string {
   if (doc.caretRangeFromPoint) {
     const range = doc.caretRangeFromPoint(x, y)
-    if (range) {
-      const word = extractWordFromRange(range)
-      if (word.length >= 2) return word
-    }
+    if (range) return extractWordFromRange(range)
   }
 
   if ('caretPositionFromPoint' in doc) {
@@ -80,17 +80,11 @@ function getWordAtPoint(doc: Document, x: number, y: number): string {
       const range = doc.createRange()
       range.setStart(pos.offsetNode, pos.offset)
       range.setEnd(pos.offsetNode, pos.offset)
-      const word = extractWordFromRange(range)
-      if (word.length >= 2) return word
+      return extractWordFromRange(range)
     }
   }
 
-  const el = doc.elementFromPoint(x, y)
-  if (!el) return ''
-
-  const text = el.textContent?.trim() ?? ''
-  const words = text.match(/[\wáéíóúñüÁÉÍÓÚÑÜ'-]{2,}/g)
-  return words?.[0] ?? ''
+  return ''
 }
 
 function getSentence(doc: Document, x: number, y: number): string {
@@ -148,19 +142,37 @@ export function EpubViewer({
     const attachedDocs = new Set<Document>()
     const docCleanup = new Map<Document, () => void>()
     let suppressClickUntil = 0
+    let lastBackgroundTapAt = 0
+
+    const toggleBackground = () => {
+      const now = Date.now()
+      if (now - lastBackgroundTapAt < 280) return
+      lastBackgroundTapAt = now
+      onBackgroundTapRef.current?.()
+    }
 
     const handlePointer = (doc: Document, event: Event) => {
       const coords = eventCoords(event)
       if (!coords) return
 
-      const word = getWordAtPoint(doc, coords.x, coords.y)
-      if (word.length < 2 || !translationEnabledRef.current) {
-        onBackgroundTapRef.current?.()
+      const word =
+        translationEnabledRef.current ? getWordAtPoint(doc, coords.x, coords.y) : ''
+
+      if (!word) {
+        if (event.type === 'touchend') {
+          event.preventDefault()
+          suppressClickUntil = Date.now() + 450
+          toggleBackground()
+        } else if (event.type === 'click') {
+          if (Date.now() < suppressClickUntil) return
+          toggleBackground()
+        }
         return
       }
 
       if (event.type === 'touchend') {
-        suppressClickUntil = Date.now() + 400
+        suppressClickUntil = Date.now() + 450
+        event.preventDefault()
       } else if (event.type === 'click' && Date.now() < suppressClickUntil) {
         return
       }
@@ -185,11 +197,14 @@ export function EpubViewer({
       if (attachedDocs.has(doc)) return
       attachedDocs.add(doc)
 
+      doc.body.style.cursor = 'default'
+      doc.body.style.setProperty('-webkit-tap-highlight-color', 'transparent')
+
       const onClick = (event: Event) => handlePointer(doc, event)
       const onTouchEnd = (event: Event) => handlePointer(doc, event)
 
       doc.addEventListener('click', onClick, true)
-      doc.addEventListener('touchend', onTouchEnd, true)
+      doc.addEventListener('touchend', onTouchEnd, { capture: true, passive: false })
 
       docCleanup.set(doc, () => {
         doc.removeEventListener('click', onClick, true)
@@ -222,7 +237,7 @@ export function EpubViewer({
   }, [ready])
 
   return (
-    <div className="reader-scroll h-full overflow-hidden">
+    <div className="reader-scroll h-full w-full overflow-hidden touch-manipulation">
       <div ref={containerRef} className="h-full w-full overflow-hidden" />
     </div>
   )

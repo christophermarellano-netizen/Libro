@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ContentsPanel } from '../components/Reader/ContentsPanel'
 import { EpubViewer, type WordTapEvent } from '../components/Reader/EpubViewer'
 import { ReaderBottomBar } from '../components/Reader/ReaderBottomBar'
+import { ReaderLoadingOverlay } from '../components/Reader/ReaderLoadingOverlay'
 import { ReaderSettingsPanel } from '../components/Reader/SettingsPanel'
 import { ReaderTopBar } from '../components/Reader/ReaderTopBar'
 import { SearchPanel } from '../components/Reader/SearchPanel'
@@ -67,6 +68,9 @@ export function ReaderPage() {
   const {
     containerRef,
     ready,
+    loadingProgress,
+    loadError,
+    retry,
     percentage,
     currentCfi,
     chapterLabel,
@@ -182,8 +186,39 @@ export function ReaderPage() {
 
   if (!book) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-libro-muted">Loading book…</p>
+      <div className="fixed inset-0 flex items-center justify-center bg-libro-bg">
+        <ReaderLoadingOverlay progress={5} label="Loading book…" />
+      </div>
+    )
+  }
+
+  if (!book.epubBlob) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-libro-bg px-6 text-center">
+        <p className="text-sm text-red-600">This book file is missing from your library.</p>
+        <Link to="/" className="text-sm font-medium text-libro-accent underline">
+          Back to library
+        </Link>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-libro-bg px-6 text-center">
+        <p className="text-sm text-red-600">{loadError}</p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={retry}
+            className="rounded-lg bg-libro-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Try again
+          </button>
+          <Link to="/" className="rounded-lg border border-libro-border px-4 py-2 text-sm font-medium">
+            Back to library
+          </Link>
+        </div>
       </div>
     )
   }
@@ -192,7 +227,10 @@ export function ReaderPage() {
   const bookmarked = currentCfi ? isBookmarked(currentCfi) : false
 
   return (
-    <div className={`relative h-full overflow-hidden ${themeClass}`} data-reader-theme={readerSettings.theme}>
+    <div
+      className={`fixed inset-0 overflow-hidden ${themeClass}`}
+      data-reader-theme={readerSettings.theme}
+    >
       <div className="absolute inset-0 z-0">
         <EpubViewer
           containerRef={containerRef}
@@ -203,6 +241,8 @@ export function ReaderPage() {
           getRendition={getRendition}
         />
       </div>
+
+      {!ready && <ReaderLoadingOverlay progress={loadingProgress} />}
 
       <ReaderTopBar
         visible={showChrome && panel !== 'search'}

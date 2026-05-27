@@ -58,7 +58,12 @@ Libro can sync your library, reading progress, bookmarks, vocab, and settings ac
    Your Libro sign-in code: {{ .Token }}
    ```
    (You can keep a magic link in the same email as a fallback for desktop.)
-6. Sign in via **Settings → Cloud Sync** on the live app, then enter the 6-digit code from your email.
+6. **Email rate limits:** Supabase’s built-in email service allows only a few auth emails per hour (shared across all users). For real use, configure custom SMTP — [Resend](https://resend.com) works well:
+   - Create a Resend account and verify your domain (or use their onboarding domain for testing)
+   - Supabase → **Project Settings → Authentication → SMTP Settings**
+   - Enable custom SMTP with host `smtp.resend.com`, port `465`, username `resend`, password = your Resend API key
+   - Then raise limits under **Authentication → Rate Limits**
+7. Sign in via **Settings → Cloud Sync** on the live app, then enter the 6-digit code from your email.
 
 Without Supabase, books stay in local IndexedDB. Use **Settings → Backup & Restore** to move your library manually.
 

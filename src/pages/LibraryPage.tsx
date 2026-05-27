@@ -17,14 +17,11 @@ import type { Book, LibrarySort, LibraryView } from '../types'
 export function LibraryPage() {
   const navigate = useNavigate()
   const { settings, save } = useSettings()
-  const [importing, setImporting] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [importNotice, setImportNotice] = useState<string | null>(null)
 
   const sort = settings?.librarySort ?? 'recent'
   const rawView = settings?.libraryView ?? 'grid'
   const view = rawView === 'coverflow' ? 'shelf' : rawView
-  const { books, importBook, deleteBook, touchBook } = useBooks(sort)
+  const { books, deleteBook, touchBook } = useBooks(sort)
   const [focusedBook, setFocusedBook] = useState<Book | null>(null)
   const [bookMenu, setBookMenu] = useState<{ book: Book; x: number; y: number } | null>(null)
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null)
@@ -68,30 +65,6 @@ export function LibraryPage() {
       })
   }, [books])
 
-  const handleImport = async (files: FileList) => {
-    setImporting(true)
-    setImportError(null)
-    setImportNotice(null)
-    const importedTitles: string[] = []
-    try {
-      for (const file of Array.from(files)) {
-        await importBook(file)
-        importedTitles.push(file.name.replace(/\.epub$/i, ''))
-      }
-      if (importedTitles.length > 0) {
-        setImportNotice(
-          importedTitles.length === 1
-            ? `Added “${importedTitles[0]}” to your library`
-            : `Added ${importedTitles.length} books to your library`,
-        )
-      }
-    } catch (e) {
-      setImportError(e instanceof Error ? e.message : 'Import failed')
-    } finally {
-      setImporting(false)
-    }
-  }
-
   const handleOpen = async (book: Book) => {
     if (book.id) {
       await touchBook(book.id)
@@ -120,21 +93,7 @@ export function LibraryPage() {
       <TopBar
         view={view}
         onViewChange={(v: LibraryView) => save({ libraryView: v })}
-        onImport={handleImport}
-        importing={importing}
       />
-
-      {importError && (
-        <div className="bg-red-50 px-4 py-2 text-center text-sm text-red-600">
-          {importError}
-        </div>
-      )}
-
-      {importNotice && !importError && (
-        <div className="bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-700">
-          {importNotice}
-        </div>
-      )}
 
       <main className="flex flex-1 flex-col overflow-hidden">
         <LibrarySubHeader
@@ -151,24 +110,24 @@ export function LibraryPage() {
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <h2 className="text-lg font-semibold">{focusedBook.title}</h2>
-                  <p className="text-sm text-libro-muted">{focusedBook.author}</p>
+                  <h2 className="text-lg font-semibold text-sentence-case">{focusedBook.title}</h2>
+                  <p className="text-sm text-libro-muted text-sentence-case">{focusedBook.author}</p>
                 </motion.div>
               </AnimatePresence>
             ) : (
               <div>
-                <h2 className="text-lg font-semibold">Your shelf</h2>
-                <p className="text-sm text-libro-muted">
-                  Click a spine to center it and show its cover
+                <h2 className="text-lg font-semibold text-sentence-case">your shelf</h2>
+                <p className="text-sm text-libro-muted text-sentence-case">
+                  click a spine to center it and show its cover
                 </p>
               </div>
             )
           ) : (
             <div>
-              <h2 className="text-lg font-semibold">Your library</h2>
-              <p className="text-sm text-libro-muted">
+              <h2 className="text-lg font-semibold text-sentence-case">your library</h2>
+              <p className="text-sm text-libro-muted text-sentence-case">
                 {books.length === 0
-                  ? 'Import a Spanish EPUB to get started'
+                  ? 'import a Spanish EPUB to get started'
                   : `${books.length} book${books.length === 1 ? '' : 's'}`}
               </p>
             </div>
