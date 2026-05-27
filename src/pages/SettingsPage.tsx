@@ -98,14 +98,16 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="relative border-b border-libro-border bg-libro-surface px-4 py-3 text-center">
-        <Link
-          to="/"
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-libro-muted transition hover:text-libro-text"
-        >
-          ← Back
-        </Link>
-        <h1 className="text-lg font-semibold">Settings</h1>
+      <header className="relative border-b border-libro-border bg-libro-surface">
+        <div className="relative px-4 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))] text-center">
+          <Link
+            to="/"
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-libro-muted transition hover:text-libro-text"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-lg font-semibold">Settings</h1>
+        </div>
       </header>
 
       <div className="mx-auto w-full max-w-lg flex-1 space-y-6 p-6">

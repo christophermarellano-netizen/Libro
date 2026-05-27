@@ -17,16 +17,17 @@ export function TopBar({
   importing,
 }: TopBarProps) {
   return (
-    <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-libro-border bg-libro-surface px-5 py-3">
-      <h1 className="relative z-10 text-[22px] font-semibold tracking-tight text-libro-text">
-        Libro
-      </h1>
+    <header className="relative shrink-0 border-b border-libro-border bg-libro-surface">
+      <div className="relative flex items-center justify-between gap-4 px-5 pb-3 pt-[max(12px,calc(env(safe-area-inset-top)+12px))]">
+        <h1 className="relative z-10 text-[22px] font-semibold tracking-tight text-libro-text">
+          Libro
+        </h1>
 
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <ViewToggle view={view} onChange={onViewChange} />
-      </div>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <ViewToggle view={view} onChange={onViewChange} />
+        </div>
 
-      <div className="relative z-10 flex items-center gap-3">
+        <div className="relative z-10 flex items-center gap-3">
         <ImportButton onImport={onImport} importing={importing} />
         <Link
           to="/settings"
@@ -49,6 +50,7 @@ export function TopBar({
             />
           </svg>
         </Link>
+        </div>
       </div>
     </header>
   )
