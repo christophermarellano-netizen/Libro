@@ -47,8 +47,13 @@ Libro can sync your library, reading progress, bookmarks, vocab, and settings ac
    ```bash
    supabase functions deploy deepl-translate
    ```
-4. In Supabase Auth settings, add your deploy URL (e.g. `https://libro.example.com`) as a redirect URL.
-5. Sign in via **Settings → Cloud Sync** on each device.
+4. In Supabase **Authentication → URL Configuration**, set:
+   - **Site URL:** `https://libro-oy6l.vercel.app` (your production URL)
+   - **Redirect URLs:** add both production and local dev:
+     - `https://libro-oy6l.vercel.app/**`
+     - `http://localhost:3000/**`
+   - Set `VITE_APP_URL=https://libro-oy6l.vercel.app` in Vercel environment variables.
+5. Sign in via **Settings → Cloud Sync** on the **live app** (not localhost), then open the magic link on the same device.
 
 Without Supabase, books stay in local IndexedDB. Use **Settings → Backup & Restore** to move your library manually.
 

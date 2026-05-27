@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase/client'
+import { getAppUrl } from '../lib/appUrl'
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
@@ -30,7 +31,7 @@ export function useAuth() {
 
   const signInWithEmail = async (email: string) => {
     if (!supabase) throw new Error('Supabase is not configured')
-    const redirectTo = window.location.origin
+    const redirectTo = `${getAppUrl()}/settings`
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { emailRedirectTo: redirectTo },
